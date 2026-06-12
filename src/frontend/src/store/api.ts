@@ -2,6 +2,47 @@ import { createApi, fetchBaseQuery, type BaseQueryFn, type FetchArgs, type Fetch
 import type { ContinueEntry, FeedPayload } from "./feedTypes";
 import type { SavedEntry, TitleDetailPayload } from "./titleTypes";
 
+export interface TypeaheadTitle {
+  titleId: string;
+  mediaType: "Movie" | "Show";
+  tmdbId: number | null;
+  name: string;
+  year: number | null;
+  posterPath: string | null;
+  isFullyWatched: boolean;
+  predictedRating: number | null;
+}
+
+export interface TypeaheadPayload {
+  titles: TypeaheadTitle[];
+  people: { personId: string; name: string; knownFor: string | null; profilePath: string | null }[];
+}
+
+export interface SemanticResult {
+  titleId: string;
+  mediaType: "Movie" | "Show";
+  tmdbId: number | null;
+  name: string;
+  year: number | null;
+  posterPath: string | null;
+  genres: string[];
+  similarity: number;
+  predictedRating: number | null;
+}
+
+export interface SemanticPayload {
+  available: boolean;
+  reason: string | null;
+  results: SemanticResult[];
+}
+
+export interface FiltersPayload {
+  excludeGenres: string[];
+  includeGenres: string[];
+  excludeKeywords: string[];
+  maturityCeiling: string | null;
+}
+
 export interface TasteDnaPayload {
   userMean: number;
   contrarianScore: number;
@@ -149,7 +190,7 @@ const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQue
 export const api = createApi({
   reducerPath: "reelApi",
   baseQuery: baseQueryWithReauth,
-  tagTypes: ["Session", "Sync", "Feed", "TasteDna", "Lab", "Title", "Saved"],
+  tagTypes: ["Session", "Sync", "Feed", "TasteDna", "Lab", "Title", "Saved", "Prefs"],
   endpoints: (b) => ({
     getSession: b.query<Session, void>({
       query: () => "auth/me",
@@ -285,6 +326,37 @@ export const api = createApi({
       query: () => "taste",
       providesTags: ["TasteDna"],
     }),
+    getFilters: b.query<FiltersPayload, void>({
+      query: () => "settings/filters",
+      providesTags: ["Prefs"],
+    }),
+    updateFilters: b.mutation<FiltersPayload, { filters: FiltersPayload; pin?: string }>({
+      query: ({ filters, pin }) => ({
+        url: "settings/filters",
+        method: "PUT",
+        body: filters,
+        headers: pin ? { "X-Settings-Pin": pin } : undefined,
+      }),
+      invalidatesTags: ["Prefs", "Feed"],
+    }),
+    setPin: b.mutation<{ pinConfigured: boolean }, { pin: string; currentPin?: string }>({
+      query: (body) => ({ url: "settings/pin", method: "POST", body }),
+      invalidatesTags: ["Session"],
+    }),
+    verifyPin: b.mutation<{ valid: boolean }, { pin: string }>({
+      query: (body) => ({ url: "settings/pin/verify", method: "POST", body }),
+    }),
+    removePin: b.mutation<{ pinConfigured: boolean }, { pin: string }>({
+      query: ({ pin }) => ({ url: "settings/pin", method: "DELETE", headers: { "X-Settings-Pin": pin } }),
+      invalidatesTags: ["Session"],
+    }),
+    searchTypeahead: b.query<TypeaheadPayload, string>({
+      query: (q) => `search/typeahead?q=${encodeURIComponent(q)}`,
+      keepUnusedDataFor: 30,
+    }),
+    searchSemantic: b.query<SemanticPayload, string>({
+      query: (query) => ({ url: "search/semantic", method: "POST", body: { query } }),
+    }),
     getModelMetrics: b.query<ModelMetrics, void>({
       query: () => "metrics/model",
       providesTags: ["Lab"],
@@ -317,4 +389,11 @@ export const {
   useUnsaveForLaterMutation,
   useGetSavedQuery,
   useGetTasteDnaQuery,
+  useSearchTypeaheadQuery,
+  useSearchSemanticQuery,
+  useGetFiltersQuery,
+  useUpdateFiltersMutation,
+  useSetPinMutation,
+  useVerifyPinMutation,
+  useRemovePinMutation,
 } = api;

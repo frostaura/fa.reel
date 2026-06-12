@@ -4,6 +4,7 @@ import { useGetSessionQuery, useLogoutMutation, api } from "../store/api";
 import { useDispatch } from "react-redux";
 import type { AppDispatch } from "../store";
 import SyncStatusPill from "./SyncStatusPill";
+import SearchBox from "./search/SearchBox";
 import Footer from "./Footer";
 import RealtimeSync from "./RealtimeSync";
 import {
@@ -50,7 +51,10 @@ export default function Layout() {
               Taste DNA
             </NavLink>
           </nav>
-          <div className="ml-auto flex items-center gap-3">
+          <div className="ml-auto flex items-center gap-3 flex-1 justify-end">
+            <div className="hidden md:block flex-1 max-w-md">
+              <SearchBox />
+            </div>
             <SyncStatusPill />
             <DropdownMenu>
               <DropdownMenuTrigger className="flex items-center gap-2 rounded-full border border-fa-edge bg-fa-glass px-2 py-1 hover:border-fa-frost/40 transition">

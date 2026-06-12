@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { RefreshCw } from "lucide-react";
+import PreferencesSection from "../components/settings/PreferencesSection";
 import {
   useGetSessionQuery,
   useGetSyncStatusQuery,
@@ -83,6 +84,8 @@ export default function Settings() {
           {savedFlash && <span className="fa-caption text-fa-success">Saved</span>}
         </div>
       </section>
+
+      <PreferencesSection />
 
       <section className="fa-card p-5 space-y-2">
         <h2 className="fa-section-title">Plan</h2>

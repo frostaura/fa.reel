@@ -10,6 +10,7 @@ import Lab from "./pages/Lab";
 import TitleDetail from "./pages/TitleDetail";
 import Saved from "./pages/Saved";
 import TasteDna from "./pages/TasteDna";
+import SearchResults from "./pages/SearchResults";
 
 export default function App() {
   return (
@@ -36,6 +37,7 @@ export default function App() {
           <Route path="/title/:mediaType/:tmdbId" element={<TitleDetail />} />
           <Route path="/saved" element={<Saved />} />
           <Route path="/dna" element={<TasteDna />} />
+          <Route path="/search" element={<SearchResults />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/lab" element={<Lab />} />
         </Route>
