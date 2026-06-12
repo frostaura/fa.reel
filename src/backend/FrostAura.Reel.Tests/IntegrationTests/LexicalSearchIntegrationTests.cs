@@ -2,6 +2,7 @@ using FrostAura.Reel.Application.Search;
 using FrostAura.Reel.Application.Tenancy;
 using FrostAura.Reel.Domain.Catalog;
 using FrostAura.Reel.Domain.Filters;
+using FrostAura.Reel.Domain.Library;
 using FrostAura.Reel.Domain.Tenancy;
 
 namespace FrostAura.Reel.Tests.IntegrationTests;
@@ -69,6 +70,53 @@ public class LexicalSearchIntegrationTests(PostgresFixture fixture)
         Assert.DoesNotContain(results, r => r.Title.Name == "Filtered Romance");
     }
 
+    [Fact]
+    public async Task Discovery_never_shows_titles_with_any_interaction_footprint()
+    {
+        if (!fixture.Available)
+        {
+            return;
+        }
+
+        var accountId = await SeedAccountAsync();
+        var ratedOnly = await SeedTitleAsync("Rated Long Ago", ["comedy"], []);
+        var inProgress = await SeedTitleAsync("Half Watched Show", ["comedy"], []);
+        await SeedTitleAsync("Genuinely New", ["comedy"], []);
+
+        await using (var db = fixture.CreateContext(new AccountContext()))
+        {
+            // Rated without any logged play — still "seen" (founder rule 2026-06-12).
+            db.UserRatings.Add(new UserRating
+            {
+                Id = Guid.NewGuid(),
+                AccountId = accountId,
+                TitleId = ratedOnly,
+                SubjectType = RatingSubjectType.Movie,
+                Rating = 8,
+                RatedAt = DateTime.UtcNow,
+                SyncedAt = DateTime.UtcNow,
+            });
+            // Partially watched — belongs to continue-watching, never discovery.
+            db.WatchedTitles.Add(new WatchedTitle
+            {
+                Id = Guid.NewGuid(),
+                AccountId = accountId,
+                TitleId = inProgress,
+                Plays = 3,
+                IsFullyWatched = false,
+                FirstSyncedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var results = await SearchAsync(accountId, "funny");
+
+        Assert.Contains(results, r => r.Title.Name == "Genuinely New");
+        Assert.DoesNotContain(results, r => r.Title.Name == "Rated Long Ago");
+        Assert.DoesNotContain(results, r => r.Title.Name == "Half Watched Show");
+    }
+
     private async Task<Guid> SeedAccountAsync()
     {
         await using var db = fixture.CreateContext(new AccountContext());
@@ -85,12 +133,13 @@ public class LexicalSearchIntegrationTests(PostgresFixture fixture)
         return account.Id;
     }
 
-    private async Task SeedTitleAsync(string name, string[] genres, string[] keywords)
+    private async Task<Guid> SeedTitleAsync(string name, string[] genres, string[] keywords)
     {
         await using var db = fixture.CreateContext(new AccountContext());
+        var id = Guid.NewGuid();
         db.Add(new Title
         {
-            Id = Guid.NewGuid(),
+            Id = id,
             MediaType = MediaType.Movie,
             TraktId = Random.Shared.NextInt64(1, long.MaxValue),
             TraktSlug = name.ToLowerInvariant().Replace(' ', '-'),
@@ -101,6 +150,7 @@ public class LexicalSearchIntegrationTests(PostgresFixture fixture)
             CreatedAt = DateTime.UtcNow,
         });
         await db.SaveChangesAsync();
+        return id;
     }
 
     private async Task<List<LexicalSearchService.LexicalResult>> SearchAsync(Guid accountId, string query)

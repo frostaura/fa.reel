@@ -10,16 +10,20 @@ namespace FrostAura.Reel.Application.Search;
 /// that proposes titles — feed build, hero, rows, typeahead, semantic search, similar-titles —
 /// goes through this builder; a surface composing its own predicate is a bug by definition.
 ///
-/// Eligible = NOT fully watched (never-watched ∪ in-progress) AND not actively NotInterested
-/// AND inside the account's content-preference rules. Maturity ceilings compare certification
-/// ordinals in memory (certification systems don't order in SQL) via <see cref="PassesMaturity"/>.
+/// Eligible for DISCOVERY = zero interaction footprint (founder-locked 2026-06-12: "never show
+/// things I've already seen"): no watch history at all — even partial; in-progress lives on the
+/// continue-watching surface only — no rating (rated implies seen, including titles rated
+/// without a logged play), not actively NotInterested, and inside the account's
+/// content-preference rules. Maturity ceilings compare certification ordinals in memory
+/// (certification systems don't order in SQL) via <see cref="PassesMaturity"/>.
 /// </summary>
 public class EligibilityQueryBuilder(IReelDbContext db)
 {
     public IQueryable<Title> EligibleTitles(Guid accountId)
     {
         return ContentFilteredTitles(accountId).Where(t =>
-            !db.WatchedTitles.Any(w => w.AccountId == accountId && w.TitleId == t.Id && w.IsFullyWatched)
+            !db.WatchedTitles.Any(w => w.AccountId == accountId && w.TitleId == t.Id)
+            && !db.UserRatings.Any(r => r.AccountId == accountId && r.TitleId == t.Id)
             && !db.UserTitleReactions.Any(r =>
                 r.AccountId == accountId && r.TitleId == t.Id
                 && r.Kind == ReactionKind.NotInterested && r.RevokedAt == null));
