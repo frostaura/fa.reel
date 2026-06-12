@@ -1,0 +1,228 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── shadcn/ui CSS variable layer ─────────────────────────────────────────────────────────────
+   Mapped onto FrostAura's frosty-glass palette so every shadcn primitive inherits the brand.
+   Canonical values mirrored from fa.foresight (the FrostAura frontend token source of truth).
+
+   Color reference (FrostAura palette):
+     --fa-ink     #06121F  → hsl(211 62% 8%)
+     --fa-ink-2   #0B1B30  → hsl(213 64% 11%)
+     --fa-ink-3   #102744  → hsl(213 63% 16%)
+     --fa-frost   #A4D4F4  → hsl(207 78% 80%)
+     --fa-frost-bright #D4ECFF → hsl(209 100% 91%)
+     --fa-frost-dim #5C8AB4 → hsl(210 36% 54%)
+   ────────────────────────────────────────────────────────────────────────────────────────── */
+@layer base {
+  :root {
+    --background:       213 64% 7%;
+    --foreground:       207 78% 80%;
+    --card:             213 64% 8%;
+    --card-foreground:  207 78% 80%;
+    --popover:          213 64% 9%;
+    --popover-foreground: 207 78% 80%;
+    --primary:          209 100% 91%;
+    --primary-foreground: 213 64% 7%;
+    --secondary:        213 63% 16%;
+    --secondary-foreground: 207 78% 80%;
+    --muted:            213 63% 14%;
+    --muted-foreground: 210 36% 54%;
+    --accent:           213 63% 16%;
+    --accent-foreground: 209 100% 91%;
+    --destructive:      0 73% 73%;
+    --destructive-foreground: 213 64% 7%;
+    --border:           207 30% 22%;
+    --input:            213 63% 14%;
+    --ring:             207 78% 80%;
+    --radius:           0.5rem;
+  }
+}
+
+/* Design tokens — single source of truth. Tailwind theme mirrors these so any color referenced via
+   `fa-*` Tailwind class or `var(--fa-*)` resolves to the same value. */
+:root {
+  --fa-ink: #06121F;
+  --fa-ink-2: #0B1B30;
+  --fa-ink-3: #102744;
+  --fa-frost: #A4D4F4;
+  --fa-frost-bright: #D4ECFF;
+  --fa-frost-dim: #5C8AB4;
+  --fa-glass: rgba(164, 212, 244, 0.06);
+  --fa-glass-strong: rgba(164, 212, 244, 0.12);
+  --fa-edge: rgba(164, 212, 244, 0.18);
+  --fa-success: #7CE3B6;
+  --fa-warning: #F6C667;
+  --fa-danger: #F08484;
+
+  --fa-radius-sm: 4px;
+  --fa-radius: 8px;
+  --fa-radius-lg: 12px;
+
+  --fa-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --fa-duration-fast: 150ms;
+  --fa-duration: 250ms;
+  --fa-duration-slow: 400ms;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  background: #06121F;
+  background-image:
+    radial-gradient(1200px 600px at 30% 0%, rgba(164, 212, 244, 0.08), transparent 60%),
+    linear-gradient(180deg, #06121F 0%, #050D17 100%);
+  background-attachment: fixed;
+  color: #A4D4F4;
+  font-family: "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(164, 212, 244, 0.12); border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(164, 212, 244, 0.24); }
+::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-resizer { display: none; }
+
+@layer components {
+  .fa-card {
+    @apply bg-fa-glass border border-fa-edge rounded-xl shadow-fa-glass backdrop-blur-sm;
+  }
+  .fa-input {
+    @apply bg-fa-glass border border-fa-edge rounded-md px-3 py-2 text-fa-frost-bright placeholder:text-fa-frost-dim/60 focus:outline-none focus:border-fa-frost/40 transition;
+  }
+  .fa-button {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition border border-fa-edge bg-fa-glass-strong hover:bg-fa-glass hover:border-fa-frost/40 disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .fa-button-primary {
+    @apply fa-button bg-fa-frost/15 border-fa-frost/40 text-fa-frost-bright hover:bg-fa-frost/25;
+  }
+  .fa-button-ghost {
+    @apply inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm transition text-fa-frost/80 hover:text-fa-frost-bright hover:bg-fa-glass;
+  }
+  .fa-link {
+    @apply text-fa-frost-bright hover:underline underline-offset-4;
+  }
+
+  /* ── Typography system (canonical roles; arbitrary text-[..px] is lint-banned) ──────────── */
+  .fa-overline {
+    @apply text-[10px] leading-none font-medium uppercase tracking-[0.07em];
+  }
+  .fa-caption {
+    @apply text-[11px] leading-[1.35];
+  }
+  .fa-body {
+    @apply text-sm leading-normal;
+  }
+  .fa-section-title {
+    @apply text-sm font-medium text-fa-frost-bright;
+  }
+  .fa-metric {
+    @apply text-2xl font-light leading-tight tabular-nums;
+  }
+  .fa-metric-sm {
+    @apply text-lg font-light leading-tight tabular-nums;
+  }
+  .fa-stat-label {
+    @apply fa-overline text-fa-frost-dim;
+  }
+  .fa-stat-value {
+    @apply fa-metric text-fa-frost-bright;
+  }
+
+  /* ── Reel additions ──────────────────────────────────────────────────────────────────────
+     Poster-centric surfaces: artwork supplies the color; chrome stays monochrome frost. */
+
+  /* Legibility gradient laid over poster/backdrop art behind text. */
+  .reel-scrim {
+    background-image: linear-gradient(180deg, transparent 30%, rgba(6, 18, 31, 0.55) 62%, rgba(6, 18, 31, 0.92) 100%);
+  }
+  /* 2:3 poster base with skeleton background while the image loads. */
+  .reel-poster {
+    @apply aspect-[2/3] rounded-lg overflow-hidden bg-fa-ink-3;
+  }
+  /* Frosted overlay for locked (entitlement-gated) surfaces and the onboarding feed reveal. */
+  .reel-glass-overlay {
+    @apply backdrop-blur-xl bg-fa-ink/60;
+  }
+}
+
+/* Skeleton shimmer for loading posters/rows. */
+@keyframes reel-shimmer {
+  0%   { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+.reel-shimmer {
+  background: linear-gradient(90deg,
+    rgba(164, 212, 244, 0) 0%,
+    rgba(164, 212, 244, 0.07) 50%,
+    rgba(164, 212, 244, 0) 100%);
+  background-size: 200% 100%;
+  animation: reel-shimmer 2s ease-in-out infinite;
+}
+
+/* Entrance for cards and onboarding insights. */
+@keyframes reel-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.reel-rise { animation: reel-rise 250ms var(--fa-ease) both; }
+
+/* Frost-melt: the onboarding reveal — blur and veil dissolve to expose the feed. */
+@keyframes reel-melt {
+  from { opacity: 1; backdrop-filter: blur(24px); }
+  to   { opacity: 0; backdrop-filter: blur(0px); }
+}
+.reel-melt { animation: reel-melt 600ms var(--fa-ease) forwards; }
+
+@keyframes fa-fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Indeterminate progress sweep — a frost segment slides the track when work is in flight but no
+ * percentage is known. Used by the onboarding build-up so a busy op never reads as frozen. */
+.fa-progress-slide {
+  width: 40%;
+  animation: fa-progress-slide 1.1s ease-in-out infinite;
+}
+@keyframes fa-progress-slide {
+  0%   { left: -40%; }
+  100% { left: 100%; }
+}
+
+/* Job/sync status orbs (pipeline metrics, sync pill). */
+.fa-status-orb { width: 9px; height: 9px; border-radius: 999px; display: inline-block; }
+.fa-status-clean   { background: #34d399; box-shadow: 0 0 8px 1px rgba(52, 211, 153, 0.55); }
+.fa-status-failed  { background: #f43f5e; box-shadow: 0 0 8px 1px rgba(244, 63, 94, 0.55); }
+.fa-status-running { background: #fb923c; box-shadow: 0 0 8px 1px rgba(251, 146, 60, 0.55); animation: fa-running-pulse 1.4s ease-in-out infinite; }
+@keyframes fa-running-pulse {
+  0%, 100% { box-shadow: 0 0 8px 1px rgba(251, 146, 60, 0.55); }
+  50%      { box-shadow: 0 0 14px 3px rgba(251, 146, 60, 0.9); }
+}
+
+/* Shimmer flash for numeric counters that just updated (onboarding tickers). Keyed on value in
+   React so the animation replays each change. */
+@keyframes fa-shimmer-sweep {
+  0%   { background-position: -150% 0; }
+  100% { background-position:  250% 0; }
+}
+.fa-shimmer {
+  background-image: linear-gradient(
+    100deg,
+    currentColor 0%,
+    currentColor 35%,
+    rgba(255, 255, 255, 0.95) 50%,
+    currentColor 65%,
+    currentColor 100%
+  );
+  background-size: 250% 100%;
+  background-repeat: no-repeat;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: fa-shimmer-sweep 1.1s ease-out 1;
+}
