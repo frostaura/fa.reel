@@ -120,7 +120,7 @@ public class ReelDbContext(DbContextOptions<ReelDbContext> options, IAccountCont
         modelBuilder.Entity<TitleEmbedding>(e =>
         {
             e.HasKey(x => x.TitleId);
-            e.Property(x => x.Embedding).HasColumnType("vector(384)");
+            e.Property(x => x.Embedding).HasColumnType("vector(1536)");
             // HNSW over ivfflat: the catalog grows incrementally from zero rows, and HNSW
             // needs no representative data at index-build time.
             e.HasIndex(x => x.Embedding).HasMethod("hnsw").HasOperators("vector_cosine_ops");
@@ -189,8 +189,8 @@ public class ReelDbContext(DbContextOptions<ReelDbContext> options, IAccountCont
         modelBuilder.Entity<AccountTasteProfile>(e =>
         {
             e.HasIndex(p => p.AccountId).IsUnique();
-            e.Property(p => p.LovedCentroid).HasColumnType("vector(384)");
-            e.Property(p => p.RecentCentroid).HasColumnType("vector(384)");
+            e.Property(p => p.LovedCentroid).HasColumnType("vector(1536)");
+            e.Property(p => p.RecentCentroid).HasColumnType("vector(1536)");
             e.Property(p => p.ProfileJson).HasColumnType("jsonb");
         });
 
