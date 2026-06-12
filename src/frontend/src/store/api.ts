@@ -54,6 +54,50 @@ export interface AccountSettings {
   onboarded: boolean;
 }
 
+export interface ModelEvalDetail {
+  topRanked?: { titleId: string; rating: number; predicted: number; hit: boolean }[];
+  featureImportance?: Record<string, number>;
+  caveats?: string[];
+}
+
+export interface ModelEval {
+  modelPrecisionAt10: number;
+  baselinePrecisionAt10: number;
+  relativeImprovement: number;
+  rmse: number;
+  mae: number;
+  spearmanRho: number;
+  holdoutPositiveCount: number;
+  lowSample: boolean;
+  passedGate: boolean;
+  detail: ModelEvalDetail;
+}
+
+export interface ModelRun {
+  id: string;
+  iteration: number;
+  configHash: string;
+  splitAt: string;
+  trainRowCount: number;
+  holdoutRowCount: number;
+  positiveThreshold: number;
+  status: string;
+  startedAt: string;
+  eval: ModelEval | null;
+}
+
+export interface ModelMetrics {
+  gate: {
+    threshold: number;
+    passed: boolean;
+    latestLift: number | null;
+    iterationsUsed: number;
+    killCriterionAt: number;
+  };
+  activeArtifact: { version: number; algo: string; trainedAt: string } | null;
+  runs: ModelRun[];
+}
+
 /**
  * Auth rides in HttpOnly cookies (reel_at / reel_rt) — no headers to prepare; every request
  * just needs credentials included. The access cookie lives 15 minutes: on a 401 the base
@@ -118,6 +162,14 @@ export const api = createApi({
       query: (body) => ({ url: "settings", method: "PUT", body }),
       invalidatesTags: ["Session"],
     }),
+    getModelMetrics: b.query<ModelMetrics, void>({
+      query: () => "metrics/model",
+      providesTags: ["Lab"],
+    }),
+    trainModel: b.mutation<void, void>({
+      query: () => ({ url: "metrics/model/train", method: "POST" }),
+      invalidatesTags: ["Lab", "Sync"],
+    }),
   }),
 });
 
@@ -129,4 +181,6 @@ export const {
   useGetSyncStatusQuery,
   useTriggerSyncMutation,
   useUpdateSettingsMutation,
+  useGetModelMetricsQuery,
+  useTrainModelMutation,
 } = api;
