@@ -48,7 +48,7 @@ services:
       TMDB_RATE_PER_SEC: ${TMDB_RATE_PER_SEC:-40}
       # OpenRouter (fa.startup naming) — all LLM calls route through this gateway
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-4o-mini}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-5.4-mini}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
       OPENROUTER_MAX_CONCURRENCY: ${OPENROUTER_MAX_CONCURRENCY:-4}
       # Embeddings
