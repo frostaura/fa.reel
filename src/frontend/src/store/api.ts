@@ -1,4 +1,5 @@
 import { createApi, fetchBaseQuery, type BaseQueryFn, type FetchArgs, type FetchBaseQueryError } from "@reduxjs/toolkit/query/react";
+import type { ContinueEntry, FeedPayload } from "./feedTypes";
 
 /** Pipeline stages as reported by the backend (Account.PipelineStage). */
 export type PipelineStage =
@@ -162,6 +163,18 @@ export const api = createApi({
       query: (body) => ({ url: "settings", method: "PUT", body }),
       invalidatesTags: ["Session"],
     }),
+    getFeed: b.query<FeedPayload, void>({
+      query: () => "feed",
+      providesTags: ["Feed"],
+    }),
+    getContinueWatching: b.query<ContinueEntry[], void>({
+      query: () => "feed/continue-watching",
+      providesTags: ["Feed"],
+    }),
+    rebuildFeed: b.mutation<void, void>({
+      query: () => ({ url: "feed/rebuild", method: "POST" }),
+      invalidatesTags: ["Sync"],
+    }),
     getModelMetrics: b.query<ModelMetrics, void>({
       query: () => "metrics/model",
       providesTags: ["Lab"],
@@ -183,4 +196,7 @@ export const {
   useUpdateSettingsMutation,
   useGetModelMetricsQuery,
   useTrainModelMutation,
+  useGetFeedQuery,
+  useGetContinueWatchingQuery,
+  useRebuildFeedMutation,
 } = api;

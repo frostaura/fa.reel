@@ -1,29 +1,76 @@
-import { useGetSessionQuery } from "../store/api";
+import { Lock } from "lucide-react";
+import { useGetContinueWatchingQuery, useGetFeedQuery, useGetSessionQuery } from "../store/api";
+import RecCardHero from "../components/rec/RecCardHero";
+import RecRow from "../components/rows/RecRow";
+import ContinueWatchingRow from "../components/rows/ContinueWatchingRow";
 
-/**
- * M1 placeholder. The real surface (Tonight's Picks hero, Continue Watching, Because You
- * Loved X rows) ships in M3, after the M2 edge-proof gate passes — by design, not omission.
- */
+/** The hybrid home: tonight's-picks hero answering one question, rows below for grazing. */
 export default function Home() {
   const { data: session } = useGetSessionQuery();
+  const { data: feed, isLoading } = useGetFeedQuery();
+  const { data: continueWatching } = useGetContinueWatchingQuery();
 
-  const ready = session?.pipelineStage === "FeedReady";
+  const building = session != null && session.pipelineStage !== "FeedReady" && (feed?.hero.length ?? 0) === 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-light text-fa-frost-bright">Tonight&apos;s picks</h1>
-        <p className="fa-caption text-fa-frost-dim mt-1">
-          {ready
-            ? "Your model is trained — the full feed lands with the MVP surface."
-            : `Your library is ${session?.pipelineStage === "Ingesting" ? "still syncing" : "being processed"} (${session?.pipelineStage ?? "…"}).`}
-        </p>
+        {feed?.generatedAt && (
+          <p className="fa-caption text-fa-frost-dim mt-1">
+            ranked for you · {new Date(feed.generatedAt).toLocaleString()}
+          </p>
+        )}
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="reel-poster reel-shimmer" />
-        ))}
-      </div>
+
+      {isLoading || building ? (
+        <div className="space-y-8">
+          <div className="aspect-[16/8.5] rounded-2xl reel-shimmer" />
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="reel-poster reel-shimmer" />
+            ))}
+          </div>
+          {building && (
+            <p className="fa-body text-fa-frost-dim text-center">
+              Your picks are being assembled ({session?.pipelineStage}) — they&apos;ll appear here the moment they&apos;re ready.
+            </p>
+          )}
+        </div>
+      ) : (
+        <>
+          <RecCardHero cards={feed?.hero ?? []} />
+
+          <ContinueWatchingRow entries={continueWatching ?? []} />
+
+          {feed?.rows.map((row) => (
+            <RecRow
+              key={row.anchorTitleId}
+              title={
+                <>
+                  Because you loved <span className="text-fa-frost-bright">{row.anchorName}</span>
+                </>
+              }
+              items={row.items}
+            />
+          ))}
+
+          {(feed?.lockedRowCount ?? 0) > 0 && (
+            <section className="fa-card p-5 flex items-center gap-4">
+              <Lock className="h-5 w-5 text-fa-frost-dim shrink-0" />
+              <div>
+                <p className="fa-body text-fa-frost-bright">
+                  {feed!.lockedRowCount} more personalised row{feed!.lockedRowCount === 1 ? "" : "s"} on the full feed
+                </p>
+                <p className="fa-caption text-fa-frost-dim">
+                  The free shortlist gives you three picks a day — the paid feed unlocks every row, natural-language
+                  search and the managed Trakt queue.
+                </p>
+              </div>
+            </section>
+          )}
+        </>
+      )}
     </div>
   );
 }

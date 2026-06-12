@@ -7,6 +7,7 @@ import Onboarding from "./pages/Onboarding";
 import Home from "./pages/Home";
 import Settings from "./pages/Settings";
 import Lab from "./pages/Lab";
+import TitleDetail from "./pages/TitleDetail";
 
 export default function App() {
   return (
@@ -30,6 +31,7 @@ export default function App() {
           }
         >
           <Route path="/home" element={<Home />} />
+          <Route path="/title/:mediaType/:tmdbId" element={<TitleDetail />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/lab" element={<Lab />} />
         </Route>
