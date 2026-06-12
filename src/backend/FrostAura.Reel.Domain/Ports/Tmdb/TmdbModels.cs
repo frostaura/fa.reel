@@ -14,7 +14,8 @@ public record TmdbTitleDetails(
     int? NumberOfEpisodes,
     TmdbCastMember[] Cast,
     TmdbCrewMember[] Crew,
-    string? TrailerYouTubeKey);
+    string? TrailerYouTubeKey,
+    string[] Keywords);
 
 public record TmdbCastMember(long Id, string Name, string? Character, int Order, string? ProfilePath, string? KnownForDepartment);
 

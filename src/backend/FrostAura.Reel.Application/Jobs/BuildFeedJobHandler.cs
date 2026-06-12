@@ -59,6 +59,13 @@ public class BuildFeedJobHandler(
 
         var now = DateTime.UtcNow;
         var taste = await featureBuilder.BuildTasteStateAsync(accountId, now, ct);
+        var minPredictedRaw = await db.ContentFilters
+            .Where(f => f.AccountId == accountId && f.Kind == Domain.Filters.FilterKind.MinPredictedRating)
+            .Select(f => f.Value)
+            .FirstOrDefaultAsync(ct);
+        var minPredicted = minPredictedRaw is not null
+            && decimal.TryParse(minPredictedRaw, System.Globalization.CultureInfo.InvariantCulture, out var floor)
+            ? Math.Clamp(floor, 0m, 10m) : 0m;
 
         // ── Phase 1: widen the pool ─────────────────────────────────────────────────────
         ReportProgress(job, accountId, 10, "Scouting fresh candidates");
@@ -106,7 +113,7 @@ public class BuildFeedJobHandler(
 
         // ── Phase 5: assemble the feed ──────────────────────────────────────────────────
         ReportProgress(job, accountId, 85, "Assembling tonight's picks");
-        var snapshot = await AssembleAsync(account, artifact, taste, candidates, now, ct);
+        var snapshot = await AssembleAsync(account, artifact, taste, candidates, minPredicted, now, ct);
 
         account.PipelineStage = PipelineStage.FeedReady;
         account.PipelineStageChangedAt = now;
@@ -156,7 +163,7 @@ public class BuildFeedJobHandler(
 
     private async Task<FeedSnapshot> AssembleAsync(
         Account account, ModelArtifact artifact, FeatureVectorBuilder.TasteState taste,
-        IReadOnlyList<Candidate> candidates, DateTime now, CancellationToken ct)
+        IReadOnlyList<Candidate> candidates, decimal minPredicted, DateTime now, CancellationToken ct)
     {
         // Best-affinity person per title (for honest "you rate X 9.1" sentences).
         var shortIds = candidates.Select(c => c.Title.Id).ToList();
@@ -215,7 +222,7 @@ public class BuildFeedJobHandler(
 
         // Hero: greedy pick with genre-diversity shaping (MMR with Jaccard until embeddings land).
         var heroPool = candidates
-            .Where(c => c.Predicted >= HeroConfidenceFloor && c.Title.PosterPath != null)
+            .Where(c => c.Predicted >= Math.Max(HeroConfidenceFloor, minPredicted) && c.Title.PosterPath != null)
             .OrderByDescending(c => c.Predicted * Freshness(c.Title))
             .ToList();
         var hero = new List<Candidate>();
@@ -284,7 +291,7 @@ public class BuildFeedJobHandler(
         foreach (var anchor in anchors)
         {
             var members = candidates
-                .Where(c => !used.Contains(c.Title.Id))
+                .Where(c => !used.Contains(c.Title.Id) && c.Predicted >= minPredicted)
                 .Select(c => new { Candidate = c, Sim = AnchorSimilarity(anchor, c.Title, credits.Count != 0) })
                 .Where(x => x.Sim > 0.15d)
                 .OrderByDescending(x => (double)x.Candidate.Predicted * (0.5 + x.Sim))

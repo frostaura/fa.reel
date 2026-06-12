@@ -20,7 +20,7 @@ public static class SearchEndpoints
         // Typeahead with the personal lens: watched titles appear (badged), content filters
         // are airtight, predicted ratings decorate everything the model has scored.
         group.MapGet("/typeahead", async (
-            string q, IReelDbContext db, IAccountContext accountContext, CancellationToken ct) =>
+            string q, IReelDbContext db, IAccountContext accountContext, EligibilityQueryBuilder eligibility, CancellationToken ct) =>
         {
             var accountId = accountContext.AccountId!.Value;
             if (string.IsNullOrWhiteSpace(q) || q.Trim().Length < 2)
@@ -30,10 +30,10 @@ public static class SearchEndpoints
 
             var term = q.Trim();
 
-            var titles = await db.Titles
+            // ContentFilteredTitles (not EligibleTitles): watched titles legitimately appear
+            // here badged — but every exclusion still applies, airtight.
+            var titles = await eligibility.ContentFilteredTitles(accountId)
                 .Where(t => EF.Functions.ILike(t.Name, $"%{term}%"))
-                .Where(t => !db.ContentFilters.Any(f =>
-                    f.AccountId == accountId && f.Kind == FilterKind.ExcludeGenre && t.Genres.Contains(f.Value)))
                 .Where(t => !db.UserTitleReactions.Any(r =>
                     r.AccountId == accountId && r.TitleId == t.Id && r.Kind == ReactionKind.NotInterested && r.RevokedAt == null))
                 .OrderByDescending(t => t.TmdbPopularity)
@@ -64,60 +64,103 @@ public static class SearchEndpoints
             return Results.Ok(new { titles, people });
         });
 
-        // Natural-language search over the shared embedding space. Gracefully reports
-        // availability until OPENAI_API_KEY lands; the moment it does, this just works.
+        // Natural-language search: embedding-ranked when the OpenAI key is configured,
+        // otherwise the typo-tolerant lexical engine — Ask Reel always answers.
         group.MapPost("/semantic", async (
             SemanticRequest request,
             IReelDbContext db,
             IAccountContext accountContext,
             EligibilityQueryBuilder eligibility,
+            LexicalSearchService lexical,
             IEmbeddingProvider embeddings,
             CancellationToken ct) =>
         {
-            if (!embeddings.IsAvailable)
-            {
-                return Results.Ok(new { available = false, reason = "Natural-language search comes online once embeddings are configured.", results = Array.Empty<object>() });
-            }
-
             if (string.IsNullOrWhiteSpace(request.Query))
             {
                 return Results.BadRequest(new { error = "query is required" });
             }
 
             var accountId = accountContext.AccountId!.Value;
-            var vectors = await embeddings.EmbedAsync([request.Query.Trim()], ct);
-            var queryVector = new Vector(vectors[0]);
+            var minPredicted = await MinPredictedFloorAsync(db, accountId, ct);
 
-            var hits = await db.TitleEmbeddings
-                .OrderBy(e => e.Embedding.CosineDistance(queryVector))
-                .Take(60)
-                .Join(eligibility.EligibleTitles(accountId), e => e.TitleId, t => t.Id, (e, t) => new
+            if (embeddings.IsAvailable && await db.TitleEmbeddings.AnyAsync(ct))
+            {
+                var vectors = await embeddings.EmbedAsync([request.Query.Trim()], ct);
+                var queryVector = new Vector(vectors[0]);
+
+                var hits = await db.TitleEmbeddings
+                    .OrderBy(e => e.Embedding.CosineDistance(queryVector))
+                    .Take(60)
+                    .Join(eligibility.EligibleTitles(accountId), e => e.TitleId, t => t.Id, (e, t) => new
+                    {
+                        titleId = t.Id,
+                        mediaType = t.MediaType.ToString(),
+                        tmdbId = t.TmdbId,
+                        name = t.Name,
+                        year = t.Year,
+                        posterPath = t.PosterPath,
+                        genres = t.Genres,
+                        similarity = 1 - e.Embedding.CosineDistance(queryVector),
+                        predictedRating = db.TitleScores
+                            .Where(s => s.AccountId == accountId && s.TitleId == t.Id)
+                            .OrderByDescending(s => s.ScoredAt)
+                            .Select(s => (decimal?)s.PredictedRating)
+                            .FirstOrDefault(),
+                    })
+                    .Take(24)
+                    .ToListAsync(ct);
+
+                var ranked = hits
+                    .Where(h => h.predictedRating == null || h.predictedRating >= minPredicted)
+                    .OrderByDescending(h => (h.similarity * 0.6) + ((double)(h.predictedRating ?? 6m) / 10d * 0.4))
+                    .ToList();
+
+                return Results.Ok(new { available = true, mode = "semantic", reason = (string?)null, results = (object)ranked });
+            }
+
+            // Lexical engine — concept/genre/keyword matching with typo tolerance.
+            var lexicalHits = await lexical.SearchAsync(accountId, request.Query, 24, ct);
+            var titleIds = lexicalHits.Select(h => h.Title.Id).ToList();
+            var scores = await db.TitleScores
+                .Where(s => s.AccountId == accountId && titleIds.Contains(s.TitleId))
+                .GroupBy(s => s.TitleId)
+                .Select(g => new { TitleId = g.Key, Predicted = g.OrderByDescending(s => s.ScoredAt).First().PredictedRating })
+                .ToDictionaryAsync(s => s.TitleId, s => s.Predicted, ct);
+
+            var maxScore = lexicalHits.Count > 0 ? lexicalHits.Max(h => h.MatchScore) : 1d;
+            var results = lexicalHits
+                .Select(h => new
                 {
-                    titleId = t.Id,
-                    mediaType = t.MediaType.ToString(),
-                    tmdbId = t.TmdbId,
-                    name = t.Name,
-                    year = t.Year,
-                    posterPath = t.PosterPath,
-                    genres = t.Genres,
-                    similarity = 1 - e.Embedding.CosineDistance(queryVector),
-                    predictedRating = db.TitleScores
-                        .Where(s => s.AccountId == accountId && s.TitleId == t.Id)
-                        .OrderByDescending(s => s.ScoredAt)
-                        .Select(s => (decimal?)s.PredictedRating)
-                        .FirstOrDefault(),
+                    titleId = h.Title.Id,
+                    mediaType = h.Title.MediaType.ToString(),
+                    tmdbId = h.Title.TmdbId,
+                    name = h.Title.Name,
+                    year = h.Title.Year,
+                    posterPath = h.Title.PosterPath,
+                    genres = h.Title.Genres,
+                    similarity = Math.Round(h.MatchScore / maxScore, 3),
+                    matchedOn = h.MatchedOn,
+                    predictedRating = scores.TryGetValue(h.Title.Id, out var predicted) ? (decimal?)predicted : null,
                 })
-                .Take(24)
-                .ToListAsync(ct);
-
-            // Hybrid order: feel-similarity blended with the personal prediction when present.
-            var ranked = hits
-                .OrderByDescending(h => (h.similarity * 0.6) + ((double)(h.predictedRating ?? 6m) / 10d * 0.4))
+                .Where(h => h.predictedRating == null || h.predictedRating >= minPredicted)
+                .OrderByDescending(h => (h.similarity * 0.55) + ((double)(h.predictedRating ?? 6m) / 10d * 0.45))
                 .ToList();
 
-            return Results.Ok(new { available = true, reason = (string?)null, results = ranked });
+            return Results.Ok(new { available = true, mode = "lexical", reason = (string?)null, results = (object)results });
         });
     }
 
     public record SemanticRequest(string Query);
+
+    /// <summary>The account's MinPredictedRating floor (0 = off) — recommendation surfaces only.</summary>
+    public static async Task<decimal> MinPredictedFloorAsync(IReelDbContext db, Guid accountId, CancellationToken ct)
+    {
+        var raw = await db.ContentFilters
+            .Where(f => f.AccountId == accountId && f.Kind == FilterKind.MinPredictedRating)
+            .Select(f => f.Value)
+            .FirstOrDefaultAsync(ct);
+        return raw is not null && decimal.TryParse(raw, System.Globalization.CultureInfo.InvariantCulture, out var value)
+            ? Math.Clamp(value, 0m, 10m)
+            : 0m;
+    }
 }

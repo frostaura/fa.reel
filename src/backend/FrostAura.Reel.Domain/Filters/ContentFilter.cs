@@ -9,6 +9,8 @@ public enum FilterKind
     ExcludeTheme,
     ExcludeKeyword,
     MaxMaturity,
+    /// <summary>Floor on the predicted rating for recommendation surfaces (value = "6.5").</summary>
+    MinPredictedRating,
 }
 
 /// <summary>

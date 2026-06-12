@@ -88,6 +88,7 @@ public static class DependencyInjection
 
         // ── Serving pipeline ─────────────────────────────────────────────────────────────
         services.AddScoped<Application.Search.EligibilityQueryBuilder>();
+        services.AddScoped<Application.Search.LexicalSearchService>();
         services.AddScoped<Application.Ranking.CandidateGenerator>();
         services.AddScoped<Application.Ingestion.TitleHydrator>();
 

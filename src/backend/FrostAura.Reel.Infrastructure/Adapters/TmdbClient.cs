@@ -29,10 +29,10 @@ public class TmdbClient(
     };
 
     public Task<TmdbTitleDetails?> GetMovieAsync(long tmdbId, CancellationToken ct = default) =>
-        GetDetailsAsync($"movie/{tmdbId}?append_to_response=credits,videos", ct);
+        GetDetailsAsync($"movie/{tmdbId}?append_to_response=credits,videos,keywords", ct);
 
     public Task<TmdbTitleDetails?> GetTvAsync(long tmdbId, CancellationToken ct = default) =>
-        GetDetailsAsync($"tv/{tmdbId}?append_to_response=credits,videos", ct);
+        GetDetailsAsync($"tv/{tmdbId}?append_to_response=credits,videos,keywords", ct);
 
     public async Task<IReadOnlyList<TmdbListItem>> DiscoverAsync(
         bool movies, int? genreId, string? region, DateTime? releasedAfter, int page, CancellationToken ct = default)
@@ -209,6 +209,15 @@ public class TmdbClient(
         // TV runtime: episode_run_time array — take the first entry when present.
         var runtime = dto.Runtime ?? dto.EpisodeRunTime?.FirstOrDefault();
 
+        // Keywords: movies nest under keywords.keywords, TV under keywords.results.
+        var keywords = (dto.Keywords?.Keywords ?? dto.Keywords?.Results ?? [])
+            .Select(k => k.Name?.Trim().ToLowerInvariant())
+            .Where(k => !string.IsNullOrEmpty(k))
+            .Select(k => k!)
+            .Distinct()
+            .Take(40)
+            .ToArray();
+
         return new TmdbTitleDetails(
             dto.Id,
             dto.PosterPath,
@@ -222,7 +231,8 @@ public class TmdbClient(
             dto.NumberOfEpisodes,
             cast,
             crew,
-            trailer?.Key);
+            trailer?.Key,
+            keywords);
     }
 
     private sealed record DetailsDto(
@@ -238,7 +248,8 @@ public class TmdbClient(
         string? Tagline,
         [property: JsonPropertyName("number_of_episodes")] int? NumberOfEpisodes,
         CreditsDto? Credits,
-        VideosDto? Videos);
+        VideosDto? Videos,
+        KeywordsDto? Keywords);
 
     private sealed record CreditsDto(CastDto[]? Cast, CrewDto[]? Crew);
 
@@ -258,6 +269,10 @@ public class TmdbClient(
         [property: JsonPropertyName("profile_path")] string? ProfilePath);
 
     private sealed record VideosDto(VideoDto[]? Results);
+
+    private sealed record KeywordsDto(KeywordDto[]? Keywords, KeywordDto[]? Results);
+
+    private sealed record KeywordDto(string? Name);
 
     private sealed record VideoDto(string? Site, string? Type, string? Key, bool Official);
 }

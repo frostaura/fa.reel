@@ -64,6 +64,10 @@ services:
       APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:8090}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:8090,http://localhost:5173}
       TestHelpers__ModelStubMode: ${TestHelpers__ModelStubMode:-false}
+      QA_HELPERS_ENABLED: ${QA_HELPERS_ENABLED:-false}
+      TRAKT_ACCESS_TOKEN: ${TRAKT_ACCESS_TOKEN:-}
+      TRAKT_REFRESH_TOKEN: ${TRAKT_REFRESH_TOKEN:-}
+      TRAKT_DEV_PROFILE: ${TRAKT_DEV_PROFILE:-}
     healthcheck:
       test: [ "CMD-SHELL", "curl --fail --silent http://127.0.0.1:5000/health >/dev/null || exit 1" ]
       interval: 10s

@@ -18,17 +18,32 @@ public class EligibilityQueryBuilder(IReelDbContext db)
 {
     public IQueryable<Title> EligibleTitles(Guid accountId)
     {
-        var query = db.Titles.Where(t =>
+        return ContentFilteredTitles(accountId).Where(t =>
             !db.WatchedTitles.Any(w => w.AccountId == accountId && w.TitleId == t.Id && w.IsFullyWatched)
             && !db.UserTitleReactions.Any(r =>
                 r.AccountId == accountId && r.TitleId == t.Id
-                && r.Kind == ReactionKind.NotInterested && r.RevokedAt == null)
-            && !db.ContentFilters.Any(f =>
+                && r.Kind == ReactionKind.NotInterested && r.RevokedAt == null));
+    }
+
+    /// <summary>
+    /// The content-preference rules alone — no watched/NotInterested logic. For surfaces that
+    /// legitimately show watched titles (typeahead badges them) but must still honor every
+    /// exclusion. Discovery surfaces use <see cref="EligibleTitles"/>, which composes this.
+    /// </summary>
+    public IQueryable<Title> ContentFilteredTitles(Guid accountId)
+    {
+        var query = db.Titles.Where(t =>
+            !db.ContentFilters.Any(f =>
                 f.AccountId == accountId && f.Kind == FilterKind.ExcludeGenre && t.Genres.Contains(f.Value))
             && !db.ContentFilters.Any(f =>
                 f.AccountId == accountId && f.Kind == FilterKind.ExcludeKeyword
                 && (t.Name.ToLower().Contains(f.Value.ToLower())
-                    || (t.Overview != null && t.Overview.ToLower().Contains(f.Value.ToLower())))));
+                    || (t.Overview != null && t.Overview.ToLower().Contains(f.Value.ToLower()))
+                    // Both directions: TMDB keyword contains the filter ("lgbt themes" ⊇ "lgbt"),
+                    // or the filter is the longer form of the keyword ("lgbtq" ⊇ "lgbt"). The
+                    // length guard stops short keywords from swallowing unrelated filters.
+                    || t.Keywords.Any(k => k.Contains(f.Value.ToLower())
+                        || (k.Length >= 4 && f.Value.ToLower().StartsWith(k))))));
 
         // Include-genres are an allowlist when present: at least one must match.
         query = query.Where(t =>

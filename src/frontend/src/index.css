@@ -226,3 +226,43 @@ body {
   -webkit-text-fill-color: transparent;
   animation: fa-shimmer-sweep 1.1s ease-out 1;
 }
+
+/* On-brand range slider (foresight pattern): dim base track + frost fill via --fa-range-fill. */
+.fa-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 18px;
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+}
+.fa-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(to right,
+    var(--fa-frost-bright) 0%,
+    var(--fa-frost-bright) var(--fa-range-fill, 0%),
+    rgba(164, 212, 244, 0.15) var(--fa-range-fill, 0%),
+    rgba(164, 212, 244, 0.15) 100%);
+}
+.fa-range::-moz-range-track { height: 4px; border-radius: 999px; background: rgba(164, 212, 244, 0.15); }
+.fa-range::-moz-range-progress { height: 4px; border-radius: 999px; background: var(--fa-frost-bright); }
+.fa-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -6px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--fa-frost-bright);
+  border: 2px solid var(--fa-ink);
+  box-shadow: 0 0 0 1px var(--fa-frost-bright), 0 0 12px rgba(212, 236, 255, 0.55);
+  transition: transform var(--fa-duration-fast) var(--fa-ease);
+}
+.fa-range::-webkit-slider-thumb:hover { transform: scale(1.08); }
+.fa-range::-moz-range-thumb {
+  width: 16px; height: 16px; border-radius: 999px;
+  background: var(--fa-frost-bright); border: 2px solid var(--fa-ink);
+  box-shadow: 0 0 0 1px var(--fa-frost-bright), 0 0 12px rgba(212, 236, 255, 0.55);
+}

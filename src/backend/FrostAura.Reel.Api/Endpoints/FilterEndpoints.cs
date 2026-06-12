@@ -12,7 +12,7 @@ namespace FrostAura.Reel.Api.Endpoints;
 /// </summary>
 public static class FilterEndpoints
 {
-    public record FiltersPayload(string[] ExcludeGenres, string[] IncludeGenres, string[] ExcludeKeywords, string? MaturityCeiling);
+    public record FiltersPayload(string[] ExcludeGenres, string[] IncludeGenres, string[] ExcludeKeywords, string? MaturityCeiling, decimal? MinPredictedRating);
 
     public record PinRequest(string Pin, string? CurrentPin);
 
@@ -26,11 +26,13 @@ public static class FilterEndpoints
         {
             var account = await http.GetCurrentAccountAsync(db, ct);
             var filters = await db.ContentFilters.Where(f => f.AccountId == accountContext.AccountId!.Value).ToListAsync(ct);
+            var minRaw = filters.FirstOrDefault(f => f.Kind == FilterKind.MinPredictedRating)?.Value;
             return Results.Ok(new FiltersPayload(
                 filters.Where(f => f.Kind == FilterKind.ExcludeGenre).Select(f => f.Value).ToArray(),
                 filters.Where(f => f.Kind == FilterKind.IncludeGenre).Select(f => f.Value).ToArray(),
                 filters.Where(f => f.Kind == FilterKind.ExcludeKeyword).Select(f => f.Value).ToArray(),
-                account?.Settings.MaturityCeiling));
+                account?.Settings.MaturityCeiling,
+                minRaw is not null && decimal.TryParse(minRaw, System.Globalization.CultureInfo.InvariantCulture, out var minValue) ? minValue : null));
         });
 
         group.MapPut("/filters", async (
@@ -68,6 +70,17 @@ public static class FilterEndpoints
             AddAll(payload.ExcludeGenres, FilterKind.ExcludeGenre);
             AddAll(payload.IncludeGenres, FilterKind.IncludeGenre);
             AddAll(payload.ExcludeKeywords, FilterKind.ExcludeKeyword);
+            if (payload.MinPredictedRating is { } min && min > 0)
+            {
+                db.ContentFilters.Add(new ContentFilter
+                {
+                    Id = Guid.NewGuid(),
+                    AccountId = accountId,
+                    Kind = FilterKind.MinPredictedRating,
+                    Value = Math.Clamp(min, 0m, 10m).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture),
+                    CreatedAt = DateTime.UtcNow,
+                });
+            }
             account.Settings.MaturityCeiling = string.IsNullOrWhiteSpace(payload.MaturityCeiling) ? null : payload.MaturityCeiling;
 
             await db.SaveChangesAsync(ct);

@@ -27,11 +27,13 @@ export interface SemanticResult {
   posterPath: string | null;
   genres: string[];
   similarity: number;
+  matchedOn?: string[];
   predictedRating: number | null;
 }
 
 export interface SemanticPayload {
   available: boolean;
+  mode?: "semantic" | "lexical";
   reason: string | null;
   results: SemanticResult[];
 }
@@ -41,6 +43,7 @@ export interface FiltersPayload {
   includeGenres: string[];
   excludeKeywords: string[];
   maturityCeiling: string | null;
+  minPredictedRating: number | null;
 }
 
 export interface TasteDnaPayload {

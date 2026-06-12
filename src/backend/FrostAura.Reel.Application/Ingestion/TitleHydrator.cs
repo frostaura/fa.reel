@@ -54,6 +54,10 @@ public class TitleHydrator(IReelDbContext db, ITmdbClient tmdb)
         title.Overview ??= details.Overview;
         title.Tagline ??= details.Tagline;
         title.AiredEpisodes ??= details.NumberOfEpisodes;
+        if (details.Keywords.Length > 0)
+        {
+            title.Keywords = details.Keywords;
+        }
         if (details.TrailerYouTubeKey is not null)
         {
             title.TrailerUrl = $"https://youtube.com/watch?v={details.TrailerYouTubeKey}";

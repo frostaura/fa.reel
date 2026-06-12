@@ -161,6 +161,30 @@ export default function PreferencesSection() {
         />
       </div>
 
+      {/* Minimum predicted rating */}
+      <div className="space-y-2">
+        <p className="fa-overline text-fa-frost-dim">minimum predicted rating</p>
+        <p className="fa-caption text-fa-frost-dim">
+          Hide recommendations the model scores below this for you. 0 = show everything.
+        </p>
+        <div className="flex items-center gap-4 max-w-md">
+          <input
+            type="range"
+            min={0}
+            max={9}
+            step={0.5}
+            value={draft?.minPredictedRating ?? 0}
+            onChange={(e) => draft && setDraft({ ...draft, minPredictedRating: Number(e.target.value) || null })}
+            className="fa-range flex-1"
+            style={{ "--fa-range-fill": `${(((draft?.minPredictedRating ?? 0) / 9) * 100).toFixed(0)}%` } as React.CSSProperties}
+            data-testid="min-rating-slider"
+          />
+          <span className="fa-metric-sm text-fa-frost-bright w-14 text-right tabular-nums">
+            {(draft?.minPredictedRating ?? 0) > 0 ? (draft!.minPredictedRating!).toFixed(1) : "off"}
+          </span>
+        </div>
+      </div>
+
       {/* Maturity */}
       <div className="space-y-2">
         <p className="fa-overline text-fa-frost-dim">maturity ceiling</p>

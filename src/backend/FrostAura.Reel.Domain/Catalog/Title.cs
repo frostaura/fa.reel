@@ -41,6 +41,9 @@ public class Title
 
     public string[] Subgenres { get; set; } = [];
 
+    /// <summary>TMDB keywords (lowercased) — the content-filter substrate ("lgbt", "gore", …).</summary>
+    public string[] Keywords { get; set; } = [];
+
     /// <summary>Trakt community rating 0–10 (global taste signal + contrarian baseline).</summary>
     public decimal? TraktRating { get; set; }
 
