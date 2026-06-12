@@ -31,6 +31,7 @@ app.MapSyncEndpoints();
 app.MapFeedEndpoints();
 app.MapTitleEndpoints();
 app.MapReactionEndpoints();
+app.MapSavedEndpoints();
 app.MapMetricsEndpoints();
 app.MapSseEndpoints();
 app.MapDevEndpoints();

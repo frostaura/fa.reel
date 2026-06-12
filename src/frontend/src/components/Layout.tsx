@@ -43,6 +43,9 @@ export default function Layout() {
             <NavLink to="/home" className={navLinkClass}>
               Home
             </NavLink>
+            <NavLink to="/saved" className={navLinkClass}>
+              Saved
+            </NavLink>
           </nav>
           <div className="ml-auto flex items-center gap-3">
             <SyncStatusPill />

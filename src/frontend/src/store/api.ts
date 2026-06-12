@@ -1,5 +1,6 @@
 import { createApi, fetchBaseQuery, type BaseQueryFn, type FetchArgs, type FetchBaseQueryError } from "@reduxjs/toolkit/query/react";
 import type { ContinueEntry, FeedPayload } from "./feedTypes";
+import type { SavedEntry, TitleDetailPayload } from "./titleTypes";
 
 /** Pipeline stages as reported by the backend (Account.PipelineStage). */
 export type PipelineStage =
@@ -134,7 +135,7 @@ const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQue
 export const api = createApi({
   reducerPath: "reelApi",
   baseQuery: baseQueryWithReauth,
-  tagTypes: ["Session", "Sync", "Feed", "TasteDna", "Lab"],
+  tagTypes: ["Session", "Sync", "Feed", "TasteDna", "Lab", "Title", "Saved"],
   endpoints: (b) => ({
     getSession: b.query<Session, void>({
       query: () => "auth/me",
@@ -175,6 +176,97 @@ export const api = createApi({
       query: () => ({ url: "feed/rebuild", method: "POST" }),
       invalidatesTags: ["Sync"],
     }),
+    getTitle: b.query<TitleDetailPayload, { mediaType: string; tmdbId: number }>({
+      query: ({ mediaType, tmdbId }) => `titles/${mediaType}/${tmdbId}`,
+      providesTags: (_r, _e, arg) => [{ type: "Title", id: `${arg.mediaType}:${arg.tmdbId}` }],
+    }),
+    rateTitle: b.mutation<{ userRating: number }, { mediaType: string; tmdbId: number; rating: number; markWatched?: boolean }>({
+      query: ({ mediaType, tmdbId, ...body }) => ({ url: `titles/${mediaType}/${tmdbId}/rating`, method: "POST", body }),
+      async onQueryStarted({ mediaType, tmdbId, rating }, { dispatch, queryFulfilled }) {
+        const patch = dispatch(
+          api.util.updateQueryData("getTitle", { mediaType, tmdbId }, (draft) => {
+            draft.userState.userRating = rating;
+            draft.userState.isFullyWatched = true;
+          })
+        );
+        try {
+          await queryFulfilled;
+          dispatch(api.util.invalidateTags(["TasteDna", "Saved"]));
+        } catch {
+          patch.undo();
+        }
+      },
+    }),
+    markNotInterested: b.mutation<void, { mediaType: string; tmdbId: number; reason?: string }>({
+      query: ({ mediaType, tmdbId, reason }) => ({
+        url: `titles/${mediaType}/${tmdbId}/reactions/not_interested`,
+        method: "POST",
+        body: { reason },
+      }),
+      async onQueryStarted({ mediaType, tmdbId }, { dispatch, queryFulfilled }) {
+        const patch = dispatch(
+          api.util.updateQueryData("getTitle", { mediaType, tmdbId }, (draft) => {
+            draft.userState.notInterested = true;
+          })
+        );
+        try {
+          await queryFulfilled;
+        } catch {
+          patch.undo();
+        }
+      },
+    }),
+    undoNotInterested: b.mutation<void, { mediaType: string; tmdbId: number }>({
+      query: ({ mediaType, tmdbId }) => ({ url: `titles/${mediaType}/${tmdbId}/reactions/not_interested`, method: "DELETE" }),
+      async onQueryStarted({ mediaType, tmdbId }, { dispatch, queryFulfilled }) {
+        const patch = dispatch(
+          api.util.updateQueryData("getTitle", { mediaType, tmdbId }, (draft) => {
+            draft.userState.notInterested = false;
+          })
+        );
+        try {
+          await queryFulfilled;
+        } catch {
+          patch.undo();
+        }
+      },
+    }),
+    saveForLater: b.mutation<void, { mediaType: string; tmdbId: number }>({
+      query: ({ mediaType, tmdbId }) => ({ url: `titles/${mediaType}/${tmdbId}/reactions/save_for_later`, method: "POST" }),
+      async onQueryStarted({ mediaType, tmdbId }, { dispatch, queryFulfilled }) {
+        const patch = dispatch(
+          api.util.updateQueryData("getTitle", { mediaType, tmdbId }, (draft) => {
+            draft.userState.savedForLater = true;
+          })
+        );
+        try {
+          await queryFulfilled;
+          dispatch(api.util.invalidateTags(["Saved"]));
+        } catch {
+          patch.undo();
+        }
+      },
+    }),
+    unsaveForLater: b.mutation<void, { mediaType: string; tmdbId: number }>({
+      query: ({ mediaType, tmdbId }) => ({ url: `titles/${mediaType}/${tmdbId}/reactions/save_for_later`, method: "DELETE" }),
+      async onQueryStarted({ mediaType, tmdbId }, { dispatch, queryFulfilled }) {
+        const patch = dispatch(
+          api.util.updateQueryData("getTitle", { mediaType, tmdbId }, (draft) => {
+            draft.userState.savedForLater = false;
+          })
+        );
+        try {
+          await queryFulfilled;
+          dispatch(api.util.invalidateTags(["Saved"]));
+        } catch {
+          patch.undo();
+        }
+      },
+    }),
+    getSaved: b.query<{ managedListUrl: string | null; items: SavedEntry[] }, void>({
+      query: () => "saved",
+      providesTags: ["Saved"],
+    }),
     getModelMetrics: b.query<ModelMetrics, void>({
       query: () => "metrics/model",
       providesTags: ["Lab"],
@@ -199,4 +291,11 @@ export const {
   useGetFeedQuery,
   useGetContinueWatchingQuery,
   useRebuildFeedMutation,
+  useGetTitleQuery,
+  useRateTitleMutation,
+  useMarkNotInterestedMutation,
+  useUndoNotInterestedMutation,
+  useSaveForLaterMutation,
+  useUnsaveForLaterMutation,
+  useGetSavedQuery,
 } = api;

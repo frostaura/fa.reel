@@ -103,16 +103,21 @@ public class OutboxDispatcher(
                 .ToList();
 
             // Resolve missing Trakt ids (TMDB-discovered titles) before any send.
-            foreach (var item in payloads.Where(p => p.Payload.TraktId is null))
+            for (var i = 0; i < payloads.Count; i++)
             {
-                var resolved = await ResolveTraktIdAsync(token, item.Payload, ct);
+                if (payloads[i].Payload.TraktId is not null)
+                {
+                    continue;
+                }
+
+                var resolved = await ResolveTraktIdAsync(token, payloads[i].Payload, ct);
                 if (resolved is null)
                 {
-                    Fail(item.Entry, "trakt id unresolved");
+                    Fail(payloads[i].Entry, "trakt id unresolved");
                 }
                 else
                 {
-                    payloads[payloads.IndexOf(item)] = (item.Entry, item.Payload with { TraktId = resolved });
+                    payloads[i] = (payloads[i].Entry, payloads[i].Payload with { TraktId = resolved });
                 }
             }
 
