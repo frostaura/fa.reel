@@ -27,8 +27,8 @@ public static class TasteEndpoints
                     affinity = Math.Round(TasteMath.ShrunkenMean(kv.Value.Select(r => r.Rating).ToList(), taste.UserMean), 2),
                     count = kv.Value.Count,
                 })
-                .Where(g => g.count >= 3)
-                .OrderByDescending(g => g.affinity)
+                .Where(g => g.count >= 10)
+                .OrderByDescending(g => (double)g.affinity * Math.Log(1 + g.count))
                 .Take(8)
                 .ToList();
 
@@ -39,6 +39,7 @@ public static class TasteEndpoints
                     affinity = Math.Round(TasteMath.ShrunkenMean(kv.Value, taste.UserMean), 2),
                     count = kv.Value.Count,
                 })
+                .Where(e => e.count >= 5)
                 .OrderBy(e => e.decade)
                 .ToList();
 

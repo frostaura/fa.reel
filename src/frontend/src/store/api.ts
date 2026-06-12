@@ -2,6 +2,20 @@ import { createApi, fetchBaseQuery, type BaseQueryFn, type FetchArgs, type Fetch
 import type { ContinueEntry, FeedPayload } from "./feedTypes";
 import type { SavedEntry, TitleDetailPayload } from "./titleTypes";
 
+export interface TasteDnaPayload {
+  userMean: number;
+  contrarianScore: number;
+  ratingsCount: number;
+  hoursWatched: number;
+  titlesWatched: number;
+  showCompletionRate: number;
+  topGenres: { genre: string; affinity: number; count: number }[];
+  eras: { decade: number; affinity: number; count: number }[];
+  creators: { name: string; department: string | null; profilePath: string | null; affinity: number; count: number }[];
+  histogram: { rating: number; count: number }[];
+  drift: { year: number; shares: Record<string, number> }[];
+}
+
 /** Pipeline stages as reported by the backend (Account.PipelineStage). */
 export type PipelineStage =
   | "Linked"
@@ -267,6 +281,10 @@ export const api = createApi({
       query: () => "saved",
       providesTags: ["Saved"],
     }),
+    getTasteDna: b.query<TasteDnaPayload, void>({
+      query: () => "taste",
+      providesTags: ["TasteDna"],
+    }),
     getModelMetrics: b.query<ModelMetrics, void>({
       query: () => "metrics/model",
       providesTags: ["Lab"],
@@ -298,4 +316,5 @@ export const {
   useSaveForLaterMutation,
   useUnsaveForLaterMutation,
   useGetSavedQuery,
+  useGetTasteDnaQuery,
 } = api;

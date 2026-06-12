@@ -46,6 +46,9 @@ export default function Layout() {
             <NavLink to="/saved" className={navLinkClass}>
               Saved
             </NavLink>
+            <NavLink to="/dna" className={navLinkClass}>
+              Taste DNA
+            </NavLink>
           </nav>
           <div className="ml-auto flex items-center gap-3">
             <SyncStatusPill />
