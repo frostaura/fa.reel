@@ -7,13 +7,13 @@ Can a per-user, content-based classic-ML recommender trained on a user's full Tr
 A multi-tenant movies/TV recommender SaaS. Each user links a Trakt profile; Reel ingests everything ever watched plus ratings and in-progress shows, extracts rich taste features (LLM-derived tone/pacing/theme attributes, plot embeddings, cast/crew affinity, taste drift), and serves live, explainable recommendations restricted to titles the user has **not** finished (unwatched + currently-in-progress are eligible; fully watched is excluded). Live search and where-to-watch are first-class. Interesting now because LLM feature extraction makes content-based recommenders viable for a single user from day 1 — no cross-user data needed at launch.
 
 ## Stack & repo
-Mandated stack: .NET 10 + EF Core + PostgreSQL (pgvector for embeddings); React 19 + Tailwind + shadcn/ui. ML: ML.NET/ONNX in-process first; small Python training sidecar permitted if needed (precedent: fa.foresight). Data: Trakt API (history, ratings, watching), TMDB (catalog, search, metadata, watch providers). Standard FrostAura deploy pattern (GH Actions → Docker Hub → Portainer → Cloudflared). No repo yet — concept in `docs/concept.md`.
+Mandated stack: .NET 10 + EF Core + PostgreSQL (pgvector for embeddings); React 19 + Tailwind + shadcn/ui. ML: ML.NET FastTree in-process (pure managed — arm64-safe); ONNX MiniLM embeddings (local default; OpenRouter-compatible adapter behind `IEmbeddingProvider`); all LLM calls via OpenRouter (fa.startup config conventions + deterministic stub mode). Data: Trakt API (history, ratings, watching), TMDB (catalog, search, metadata, watch providers). Standard FrostAura deploy pattern (GH Actions → Docker Hub multi-arch → Portainer → Cloudflared; `reel.frostaura.net`). **Repo: `github.com/frostaura/fa.reel`** (public, MIT) — solution `fa.reel.slnx` at root, hexagonal backend under `src/backend`, frontend under `src/frontend`. **Quality bar: Silver** (lint + build + tests pass, deployed) — CI enforces format, coverage ratchets, security audits, pgvector integration tests, Playwright smoke.
 
 ## Owner & key people
 Dean Martin (founder). Dev/test Trakt profile: `deanmar09` (public).
 
 ## Current phase
-`framing` (created 2026-06-12).
+`prototyping` (created 2026-06-12; M1 skeleton built + founder ingest verified 2026-06-12 — full plan at `~/.claude/plans/plan-the-full-implementation-wiggly-koala.md`, architecture decisions in the implementation commits).
 
 ## Milestones
 1. **App skeleton** — mandated-stack repo: Trakt OAuth wireup (per-user config, `/auth/trakt/callback`), background sync into Postgres, tenant model.
@@ -36,3 +36,7 @@ Technologies/ once recurring-revenue path is proven (mirror fa.foresight's Labs 
 - Eligibility rule (founder-locked): recommend only unwatched + in-progress titles; in-progress powers a continue-watching surface (next episode/season).
 - Where-to-watch: TMDB watch-provider data is legal but deep links are licence-restricted (JustWatch). v1 ships provider badges + provider-side search links; true deep links require a JustWatch partnership. No scraping.
 - Collaborative filtering is deferred to ~200+ active tenants; launching cross-tenant CF with one tenant is dead on arrival.
+- **Identity = Sign in with Trakt (locked 2026-06-12):** the OAuth callback IS account creation; app session = reel_at/reel_rt HttpOnly cookies. Row-level tenancy via `IAccountScoped` + EF global query filters — a model test fails the build if a scoped entity ships without isolation.
+- **Engineering footguns found live (don't relearn):** Trakt/TMDB sit behind Cloudflare, which 403s UA-less requests — the explicit User-Agent on the typed clients is load-bearing. All `DateTime`s normalize through a model-wide UTC converter (Trakt date-only fields arrive `Kind=Unspecified`; Npgsql refuses them). Local compose postgres publishes on **5433** (5432 is taken on the dev Mac).
+- **Dev QA helper:** `POST /api/auth/dev/link` (Development + `QA_HELPERS_ENABLED=true` only) links `TRAKT_DEV_PROFILE` using `TRAKT_ACCESS_TOKEN/REFRESH_TOKEN` from `.env` — full pipeline + session without the browser consent hop. Production path of record stays the OAuth callback.
+- **Pending founder inputs:** TMDB v4 Read Access Token (hydration is parked Failed until set); `DOCKERHUB_TOKEN` repo secret; new Portainer stack id + Cloudflared hostname for `reel.frostaura.net`.
