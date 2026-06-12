@@ -43,3 +43,6 @@ test-results/
 # Logs
 *.log
 logs/
+
+# Browser-session artifacts (Playwright MCP walkthroughs)
+.playwright-mcp/
