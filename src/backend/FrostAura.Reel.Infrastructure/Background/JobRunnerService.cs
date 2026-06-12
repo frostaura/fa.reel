@@ -172,24 +172,31 @@ public sealed class JobRunnerService(
 
     private async Task HeartbeatLoopAsync(Guid jobId, CancellationToken ct)
     {
-        try
+        using var timer = new PeriodicTimer(HeartbeatInterval);
+        while (true)
         {
-            using var timer = new PeriodicTimer(HeartbeatInterval);
-            while (await timer.WaitForNextTickAsync(ct))
+            try
             {
+                if (!await timer.WaitForNextTickAsync(ct))
+                {
+                    return;
+                }
+
                 using var scope = scopeFactory.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<ReelDbContext>();
                 await db.Database.ExecuteSqlAsync(
                     $"""UPDATE "SyncJobs" SET "HeartbeatAt" = {DateTime.UtcNow} WHERE "Id" = {jobId}""", ct);
             }
-        }
-        catch (OperationCanceledException)
-        {
-            // normal shutdown of the beat
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Heartbeat loop for job {JobId} stopped unexpectedly.", jobId);
+            catch (OperationCanceledException)
+            {
+                return; // normal shutdown of the beat
+            }
+            catch (Exception ex)
+            {
+                // A transient DB hiccup must not kill the beat — a dead beat gets the job
+                // reclaimed mid-run and executed twice.
+                logger.LogWarning(ex, "Heartbeat tick failed for job {JobId}; retrying next tick.", jobId);
+            }
         }
     }
 

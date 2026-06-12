@@ -55,16 +55,22 @@ public static class DependencyInjection
         services.AddHostedService(sp => sp.GetRequiredService<ApiUsageRecorder>());
 
         // ── External adapters ──────────────────────────────────────────────────────────────
+        // Trakt/TMDB both front with Cloudflare, which rejects UA-less requests — HttpClient
+        // sends no User-Agent by default, so an explicit one is load-bearing, not cosmetic.
+        const string userAgent = "fa.reel/0.1 (+https://github.com/frostaura/fa.reel)";
+
         services.AddHttpClient<ITraktClient, TraktClient>(client =>
         {
             client.BaseAddress = new Uri("https://api.trakt.tv/");
             client.Timeout = TimeSpan.FromSeconds(30);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
         }).AddStandardResilienceHandler();
 
         services.AddHttpClient<ITmdbClient, TmdbClient>(client =>
         {
             client.BaseAddress = new Uri("https://api.themoviedb.org/3/");
             client.Timeout = TimeSpan.FromSeconds(30);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
         }).AddStandardResilienceHandler();
 
         // ── Pipeline: event hub, token store, ingestor, job handlers, schedulers ──────────

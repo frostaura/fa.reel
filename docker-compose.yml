@@ -9,6 +9,10 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-reel}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_DB: ${POSTGRES_DB:-reel}
+    ports:
+      # Published for host-side dev (dotnet run / dotnet ef / tests). 5433 avoids colliding
+      # with other Postgres instances on this machine; in-stack traffic uses postgres:5432.
+      - "${POSTGRES_HOST_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

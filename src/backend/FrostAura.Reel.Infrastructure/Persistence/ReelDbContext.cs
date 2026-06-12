@@ -77,6 +77,10 @@ public class ReelDbContext(DbContextOptions<ReelDbContext> options, IAccountCont
         {
             configurationBuilder.Properties(enumType).HaveConversion<string>().HaveMaxLength(32);
         }
+
+        // Npgsql rejects non-UTC DateTimes for timestamptz; external date-only payloads arrive
+        // Kind=Unspecified, so normalize model-wide instead of policing every assignment.
+        configurationBuilder.Properties<DateTime>().HaveConversion<UtcDateTimeConverter>();
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

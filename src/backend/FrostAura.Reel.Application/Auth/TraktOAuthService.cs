@@ -104,10 +104,12 @@ public class TraktOAuthService(
         connection.Status = ConnectionStatus.Active;
         connection.LastRefreshAt = now;
 
-        // First link kicks off the full pipeline; re-links just resync the delta.
+        // First link kicks off the full pipeline; re-links just resync the delta. Any in-flight
+        // sync of either kind suppresses the enqueue — a FullIngest already covers the delta.
         var desiredKind = isNew || account.PipelineStage == PipelineStage.Linked ? JobKind.FullIngest : JobKind.DeltaSync;
         var hasInflight = await db.SyncJobs
-            .AnyAsync(j => j.AccountId == account.Id && j.Kind == desiredKind
+            .AnyAsync(j => j.AccountId == account.Id
+                && (j.Kind == JobKind.FullIngest || j.Kind == JobKind.DeltaSync)
                 && (j.Status == JobStatus.Pending || j.Status == JobStatus.Running), ct);
         if (!hasInflight)
         {
