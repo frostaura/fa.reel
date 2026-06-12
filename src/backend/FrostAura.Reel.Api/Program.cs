@@ -1,4 +1,6 @@
 using FrostAura.Reel.Api;
+using FrostAura.Reel.Api.Endpoints;
+using FrostAura.Reel.Api.Middleware;
 using FrostAura.Reel.Infrastructure;
 using FrostAura.Reel.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -19,7 +21,12 @@ var app = builder.Build();
 
 app.UseCors();
 
+app.UseMiddleware<AccountResolutionMiddleware>();
+
 app.MapOpenApi();
+
+app.MapAuthEndpoints();
+app.MapSettingsEndpoints();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 

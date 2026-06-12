@@ -1,4 +1,5 @@
 using System.Reflection;
+using FrostAura.Reel.Application.Persistence;
 using FrostAura.Reel.Application.Tenancy;
 using FrostAura.Reel.Domain.Auth;
 using FrostAura.Reel.Domain.Catalog;
@@ -21,7 +22,7 @@ namespace FrostAura.Reel.Infrastructure.Persistence;
 /// see everything; HTTP requests are always pinned to the session's account.
 /// </summary>
 public class ReelDbContext(DbContextOptions<ReelDbContext> options, IAccountContext accountContext)
-    : DbContext(options), IDataProtectionKeyContext
+    : DbContext(options), IDataProtectionKeyContext, IReelDbContext
 {
     private readonly IAccountContext _accountContext = accountContext;
 
