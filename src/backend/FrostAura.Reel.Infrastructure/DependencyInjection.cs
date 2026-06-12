@@ -67,12 +67,17 @@ public static class DependencyInjection
             client.Timeout = TimeSpan.FromSeconds(30);
         }).AddStandardResilienceHandler();
 
-        // ── Pipeline: event hub, token store, job handlers, runner ───────────────────────
+        // ── Pipeline: event hub, token store, ingestor, job handlers, schedulers ──────────
         services.AddSingleton<IPipelineEventHub, PipelineEventHub>();
         services.AddScoped<TraktTokenStore>();
+        services.AddScoped<Application.Ingestion.TraktLibraryIngestor>();
         services.AddScoped<IJobHandler, FullIngestJobHandler>();
+        services.AddScoped<IJobHandler, DeltaSyncJobHandler>();
         services.AddScoped<IJobHandler, HydrateCatalogJobHandler>();
         services.AddHostedService<JobRunnerService>();
+        services.AddHostedService<TraktDeltaPollService>();
+        services.AddHostedService<NightlyReconcileService>();
+        services.AddHostedService<TokenRefreshService>();
 
         return services;
     }

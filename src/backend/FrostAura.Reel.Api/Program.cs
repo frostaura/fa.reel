@@ -27,6 +27,8 @@ app.MapOpenApi();
 
 app.MapAuthEndpoints();
 app.MapSettingsEndpoints();
+app.MapSyncEndpoints();
+app.MapSseEndpoints();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
