@@ -1,0 +1,45 @@
+# Secrets — never commit. Real keys live in .env locally and in Portainer/GH secrets in prod.
+.env
+.env.local
+.env.*.local
+
+# Personal data — founder Trakt export used as local test fixtures only.
+research/data/
+
+# macOS / iCloud noise
+.DS_Store
+.AppleDouble
+*.icloud
+
+# .NET
+bin/
+obj/
+artifacts/
+*.user
+.vs/
+TestResults/
+coverage/
+*.coverage
+*.cobertura.xml
+
+# Node / frontend
+node_modules/
+dist/
+dist-ssr/
+.vite/
+coverage-frontend/
+playwright-report/
+test-results/
+*.tsbuildinfo
+
+# IDE
+.idea/
+*.swp
+
+# ML / local model scratch (bundled ONNX models are fetched at build time, not committed)
+*.onnx
+!docs/**/*.onnx
+
+# Logs
+*.log
+logs/
