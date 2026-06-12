@@ -69,7 +69,9 @@ public static class FilterEndpoints
 
             AddAll(payload.ExcludeGenres, FilterKind.ExcludeGenre);
             AddAll(payload.IncludeGenres, FilterKind.IncludeGenre);
-            AddAll(payload.ExcludeKeywords, FilterKind.ExcludeKeyword);
+            // Umbrella terms ("lgbtq") expand to their TMDB keyword family; each member
+            // round-trips to the UI as its own removable chip.
+            AddAll(Application.Search.KeywordFilterExpansion.Expand(payload.ExcludeKeywords), FilterKind.ExcludeKeyword);
             if (payload.MinPredictedRating is { } min && min > 0)
             {
                 db.ContentFilters.Add(new ContentFilter
