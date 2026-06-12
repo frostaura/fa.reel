@@ -84,6 +84,48 @@ public class TraktClient(
             user.Images?.Avatar?.Full);
     }
 
+    public async Task<IReadOnlyList<TraktWatchedMovie>> GetWatchedMoviesAsync(string accessToken, RatePriority priority, CancellationToken ct = default) =>
+        await GetApiAsync<List<TraktWatchedMovie>>("sync/watched/movies?extended=full", accessToken, priority, ct) ?? [];
+
+    public async Task<IReadOnlyList<TraktWatchedShow>> GetWatchedShowsAsync(string accessToken, RatePriority priority, CancellationToken ct = default) =>
+        await GetApiAsync<List<TraktWatchedShow>>("sync/watched/shows?extended=full", accessToken, priority, ct) ?? [];
+
+    public async Task<IReadOnlyList<TraktRatingItem>> GetRatingsAsync(string accessToken, RatePriority priority, CancellationToken ct = default) =>
+        await GetApiAsync<List<TraktRatingItem>>("sync/ratings?extended=full", accessToken, priority, ct) ?? [];
+
+    public async Task<TraktShowProgress?> GetShowProgressAsync(string accessToken, long showTraktId, RatePriority priority, CancellationToken ct = default) =>
+        await GetApiAsync<TraktShowProgress>($"shows/{showTraktId}/progress/watched?hidden=false&specials=false", accessToken, priority, ct);
+
+    public async Task<string> GetLastActivitiesRawAsync(string accessToken, RatePriority priority, CancellationToken ct = default)
+    {
+        await rateGate.AcquireAsync(priority, ct);
+        usageRecorder.Record(ApiProvider.Trakt);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "sync/last_activities");
+        ApplyApiHeaders(request, accessToken);
+        using var response = await httpClient.SendAsync(request, ct);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync(ct);
+    }
+
+    private async Task<T?> GetApiAsync<T>(string path, string accessToken, RatePriority priority, CancellationToken ct)
+        where T : class
+    {
+        await rateGate.AcquireAsync(priority, ct);
+        usageRecorder.Record(ApiProvider.Trakt);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, path);
+        ApplyApiHeaders(request, accessToken);
+        using var response = await httpClient.SendAsync(request, ct);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<T>(JsonOptions, ct);
+    }
+
     internal void ApplyApiHeaders(HttpRequestMessage request, string? accessToken)
     {
         request.Headers.Add("trakt-api-version", "2");

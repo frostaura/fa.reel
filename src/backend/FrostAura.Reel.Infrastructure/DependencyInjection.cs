@@ -1,11 +1,16 @@
 using FrostAura.Reel.Application.Auth;
+using FrostAura.Reel.Application.Jobs;
 using FrostAura.Reel.Application.Persistence;
+using FrostAura.Reel.Application.Pipeline;
+using FrostAura.Reel.Application.Sync;
 using FrostAura.Reel.Application.Tenancy;
 using FrostAura.Reel.Domain.Ports;
 using FrostAura.Reel.Infrastructure.Adapters;
+using FrostAura.Reel.Infrastructure.Background;
 using FrostAura.Reel.Infrastructure.Persistence;
 using FrostAura.Reel.Infrastructure.RateLimiting;
 using FrostAura.Reel.Infrastructure.Security;
+using FrostAura.Reel.Infrastructure.Sse;
 using FrostAura.Reel.Infrastructure.Telemetry;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
@@ -55,6 +60,19 @@ public static class DependencyInjection
             client.BaseAddress = new Uri("https://api.trakt.tv/");
             client.Timeout = TimeSpan.FromSeconds(30);
         }).AddStandardResilienceHandler();
+
+        services.AddHttpClient<ITmdbClient, TmdbClient>(client =>
+        {
+            client.BaseAddress = new Uri("https://api.themoviedb.org/3/");
+            client.Timeout = TimeSpan.FromSeconds(30);
+        }).AddStandardResilienceHandler();
+
+        // ── Pipeline: event hub, token store, job handlers, runner ───────────────────────
+        services.AddSingleton<IPipelineEventHub, PipelineEventHub>();
+        services.AddScoped<TraktTokenStore>();
+        services.AddScoped<IJobHandler, FullIngestJobHandler>();
+        services.AddScoped<IJobHandler, HydrateCatalogJobHandler>();
+        services.AddHostedService<JobRunnerService>();
 
         return services;
     }
