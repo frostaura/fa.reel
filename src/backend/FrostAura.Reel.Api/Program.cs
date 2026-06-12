@@ -28,6 +28,7 @@ app.MapOpenApi();
 app.MapAuthEndpoints();
 app.MapSettingsEndpoints();
 app.MapSyncEndpoints();
+app.MapMetricsEndpoints();
 app.MapSseEndpoints();
 app.MapDevEndpoints();
 

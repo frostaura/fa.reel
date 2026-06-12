@@ -73,6 +73,11 @@ public static class DependencyInjection
             client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
         }).AddStandardResilienceHandler();
 
+        // ── ML engine ──────────────────────────────────────────────────────────────────────
+        services.AddSingleton<IModelEngine, Ml.FastTreeModelEngine>();
+        services.AddScoped<Application.Ml.FeatureVectorBuilder>();
+        services.AddScoped<Application.Ml.EvalHarness>();
+
         // ── Pipeline: event hub, token store, ingestor, job handlers, schedulers ──────────
         services.AddSingleton<IPipelineEventHub, PipelineEventHub>();
         services.AddScoped<TraktTokenStore>();
@@ -80,6 +85,8 @@ public static class DependencyInjection
         services.AddScoped<IJobHandler, FullIngestJobHandler>();
         services.AddScoped<IJobHandler, DeltaSyncJobHandler>();
         services.AddScoped<IJobHandler, HydrateCatalogJobHandler>();
+        services.AddScoped<IJobHandler, TrainJobHandler>();
+        services.AddScoped<IJobHandler, EvaluateJobHandler>();
         services.AddHostedService<JobRunnerService>();
         services.AddHostedService<TraktDeltaPollService>();
         services.AddHostedService<NightlyReconcileService>();
