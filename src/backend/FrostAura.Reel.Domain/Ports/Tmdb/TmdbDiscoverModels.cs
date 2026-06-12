@@ -1,5 +1,8 @@
 namespace FrostAura.Reel.Domain.Ports.Tmdb;
 
+/// <summary>One provider entry from TMDB watch/providers for a region.</summary>
+public record TmdbWatchProvider(int ProviderId, string Name, string? LogoPath, int DisplayPriority, Providers.AvailabilityKind Kind);
+
 /// <summary>One entry of a TMDB list payload (discover/trending) — enough to seed a candidate.</summary>
 public record TmdbListItem(
     long Id,

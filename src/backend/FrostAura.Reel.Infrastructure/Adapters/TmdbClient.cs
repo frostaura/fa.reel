@@ -61,6 +61,60 @@ public class TmdbClient(
     public Task<IReadOnlyList<TmdbListItem>> GetTrendingAsync(bool movies, CancellationToken ct = default) =>
         GetListAsync(movies ? "trending/movie/week" : "trending/tv/week", movies, ct);
 
+    public async Task<IReadOnlyList<TmdbWatchProvider>> GetWatchProvidersAsync(long tmdbId, bool movie, string region, CancellationToken ct = default)
+    {
+        await rateGate.AcquireAsync(RatePriority.Interactive, ct);
+        usageRecorder.Record(ApiProvider.Tmdb);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{(movie ? "movie" : "tv")}/{tmdbId}/watch/providers");
+        var token = configuration["TMDB_READ_ACCESS_TOKEN"]
+            ?? throw new InvalidOperationException("TMDB_READ_ACCESS_TOKEN is required.");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        using var response = await httpClient.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            return [];
+        }
+
+        var dto = await response.Content.ReadFromJsonAsync<WatchProvidersDto>(JsonOptions, ct);
+        if (dto?.Results is null || !dto.Results.TryGetValue(region.ToUpperInvariant(), out var regional))
+        {
+            return [];
+        }
+
+        var results = new List<TmdbWatchProvider>();
+        void Add(WatchProviderEntryDto[]? entries, Domain.Providers.AvailabilityKind kind)
+        {
+            foreach (var entry in entries ?? [])
+            {
+                results.Add(new TmdbWatchProvider(entry.ProviderId, entry.ProviderName ?? "?", entry.LogoPath, entry.DisplayPriority, kind));
+            }
+        }
+
+        Add(regional.Flatrate, Domain.Providers.AvailabilityKind.Flatrate);
+        Add(regional.Rent, Domain.Providers.AvailabilityKind.Rent);
+        Add(regional.Buy, Domain.Providers.AvailabilityKind.Buy);
+        Add(regional.Free, Domain.Providers.AvailabilityKind.Free);
+        Add(regional.Ads, Domain.Providers.AvailabilityKind.Ads);
+        return results;
+    }
+
+    private sealed record WatchProvidersDto(Dictionary<string, RegionProvidersDto>? Results);
+
+    private sealed record RegionProvidersDto(
+        WatchProviderEntryDto[]? Flatrate,
+        WatchProviderEntryDto[]? Rent,
+        WatchProviderEntryDto[]? Buy,
+        WatchProviderEntryDto[]? Free,
+        WatchProviderEntryDto[]? Ads);
+
+    private sealed record WatchProviderEntryDto(
+        [property: JsonPropertyName("provider_id")] int ProviderId,
+        [property: JsonPropertyName("provider_name")] string? ProviderName,
+        [property: JsonPropertyName("logo_path")] string? LogoPath,
+        [property: JsonPropertyName("display_priority")] int DisplayPriority);
+
     private async Task<IReadOnlyList<TmdbListItem>> GetListAsync(string path, bool movies, CancellationToken ct)
     {
         await rateGate.AcquireAsync(RatePriority.Reconcile, ct);

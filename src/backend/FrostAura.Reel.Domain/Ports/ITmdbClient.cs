@@ -20,4 +20,7 @@ public interface ITmdbClient
 
     /// <summary>This week's trending titles (movie or tv).</summary>
     Task<IReadOnlyList<TmdbListItem>> GetTrendingAsync(bool movies, CancellationToken ct = default);
+
+    /// <summary>Watch providers for one title in one region (JustWatch-powered; attribution required).</summary>
+    Task<IReadOnlyList<TmdbWatchProvider>> GetWatchProvidersAsync(long tmdbId, bool movie, string region, CancellationToken ct = default);
 }

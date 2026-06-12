@@ -73,6 +73,14 @@ public static class DependencyInjection
             client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
         }).AddStandardResilienceHandler();
 
+        services.AddHttpClient<IEmbeddingProvider, OpenAiEmbeddingProvider>(client =>
+        {
+            var baseUrl = configuration["EMBEDDINGS_BASE_URL"] ?? "https://api.openai.com/v1";
+            client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromSeconds(30);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
+        }).AddStandardResilienceHandler();
+
         // ── ML engine ──────────────────────────────────────────────────────────────────────
         services.AddSingleton<IModelEngine, Ml.FastTreeModelEngine>();
         services.AddScoped<Application.Ml.FeatureVectorBuilder>();
