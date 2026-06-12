@@ -13,11 +13,11 @@ Mandated stack: .NET 10 + EF Core + PostgreSQL (pgvector for embeddings); React 
 Dean Martin (founder). Dev/test Trakt profile: `deanmar09` (public).
 
 ## Current phase
-`prototyping` (created 2026-06-12; M1 skeleton built + founder ingest verified 2026-06-12 — full plan at `~/.claude/plans/plan-the-full-implementation-wiggly-koala.md`, architecture decisions in the implementation commits).
+`experiments running` (created 2026-06-12; M1 verified + **M2 edge proof PASSED 2026-06-12**: model precision@10 70% vs popularity baseline 50% = **40% relative lift** on the leakage-clean time split, iteration 1 of 3, reproducible, founder account, before embeddings/LLM attributes. The research question has its first affirmative answer; M3 MVP surface build underway. Full plan at `~/.claude/plans/plan-the-full-implementation-wiggly-koala.md`.)
 
 ## Milestones
-1. **App skeleton** — mandated-stack repo: Trakt OAuth wireup (per-user config, `/auth/trakt/callback`), background sync into Postgres, tenant model.
-2. **In-app ML pipeline + edge proof** — feature extraction → training → time-split evaluation as app jobs; v1 model beats popularity baseline by ≥20% relative precision@10 on held-out ratings (leakage-clean), surfaced on an in-app metrics view.
+1. **App skeleton** ✅ (2026-06-12) — mandated-stack repo: Trakt OAuth wireup (per-user config, `/auth/trakt/callback`), background sync into Postgres, tenant model. Founder ingest verified: 3,484 ratings exact, 3,091 watched titles, 113 in-progress.
+2. **In-app ML pipeline + edge proof** ✅ (2026-06-12) — feature extraction → training → time-split evaluation as app jobs; v1 model beat the popularity baseline by **40% relative precision@10** (70% vs 50%, ≥20% required), leakage-clean, reproducible, surfaced on the in-app `/lab` metrics view. Iteration 1 of 3; cast/crew affinity features carried the edge.
 3. **MVP surface** — per `docs/product-spec.md`: tonight's-picks hero + rows, card anatomy, reactions + Trakt write-back + managed list, both search modes, where-to-watch ladder, taste DNA, live build-up onboarding.
 4. **Multi-tenant** — onboarding flow live; ≥5 external users linked profiles.
 5. **Commercial gate** — Trakt commercial-API terms agreed; JustWatch deep-link decision made.
