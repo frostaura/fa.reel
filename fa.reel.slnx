@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/backend/">
+    <Project Path="src/backend/FrostAura.Reel.Api/FrostAura.Reel.Api.csproj" />
+    <Project Path="src/backend/FrostAura.Reel.Application/FrostAura.Reel.Application.csproj" />
+    <Project Path="src/backend/FrostAura.Reel.Domain/FrostAura.Reel.Domain.csproj" />
+    <Project Path="src/backend/FrostAura.Reel.Infrastructure/FrostAura.Reel.Infrastructure.csproj" />
+    <Project Path="src/backend/FrostAura.Reel.Tests/FrostAura.Reel.Tests.csproj" />
+  </Folder>
+</Solution>
