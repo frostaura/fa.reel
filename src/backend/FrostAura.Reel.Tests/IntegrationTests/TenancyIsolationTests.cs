@@ -77,15 +77,15 @@ public class TenancyIsolationTests(PostgresFixture fixture)
         var far = new Title { Id = Guid.NewGuid(), MediaType = MediaType.Movie, TraktId = Random.Shared.NextInt64(1, long.MaxValue), TraktSlug = "far", Name = "Far", CreatedAt = DateTime.UtcNow };
         db.AddRange(near, far);
 
-        var nearVec = new float[384];
-        var farVec = new float[384];
+        var nearVec = new float[1536];
+        var farVec = new float[1536];
         nearVec[0] = 1f;                 // ≈ query direction
-        farVec[383] = 1f;                // orthogonal
+        farVec[1535] = 1f;                // orthogonal
         db.TitleEmbeddings.Add(new TitleEmbedding { TitleId = near.Id, Embedding = new Vector(nearVec), EmbeddingModel = "test", SourceTextHash = "h1", CreatedAt = DateTime.UtcNow });
         db.TitleEmbeddings.Add(new TitleEmbedding { TitleId = far.Id, Embedding = new Vector(farVec), EmbeddingModel = "test", SourceTextHash = "h2", CreatedAt = DateTime.UtcNow });
         await db.SaveChangesAsync();
 
-        var query = new float[384];
+        var query = new float[1536];
         query[0] = 1f;
         var queryVec = new Vector(query);
 

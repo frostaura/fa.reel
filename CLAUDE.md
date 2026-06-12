@@ -18,8 +18,8 @@ Dean Martin (founder). Dev/test Trakt profile: `deanmar09` (public).
 ## Milestones
 1. **App skeleton** ✅ (2026-06-12) — mandated-stack repo: Trakt OAuth wireup (per-user config, `/auth/trakt/callback`), background sync into Postgres, tenant model. Founder ingest verified: 3,484 ratings exact, 3,091 watched titles, 113 in-progress.
 2. **In-app ML pipeline + edge proof** ✅ (2026-06-12) — feature extraction → training → time-split evaluation as app jobs; v1 model beat the popularity baseline by **40% relative precision@10** (70% vs 50%, ≥20% required), leakage-clean, reproducible, surfaced on the in-app `/lab` metrics view. Iteration 1 of 3; cast/crew affinity features carried the edge.
-3. **MVP surface** — per `docs/product-spec.md`: tonight's-picks hero + rows, card anatomy, reactions + Trakt write-back + managed list, both search modes, where-to-watch ladder, taste DNA, live build-up onboarding.
-4. **Multi-tenant** — onboarding flow live; ≥5 external users linked profiles.
+3. **MVP surface** ✅ (2026-06-12) — per `docs/product-spec.md`: tonight's-picks hero + rows ✓, card anatomy + expanded modal ✓, reactions + Trakt write-back + managed "Reel — Up Next" list (created live, id 35111432) ✓, both search modes (typeahead live; semantic key-gated and graceful) ✓, where-to-watch ladder (direct/TMDB kinds + attribution) ✓, taste DNA dashboard ✓, live build-up onboarding with frost-melt reveal ✓. Exit checks verified live: filter airtightness (horror excluded → 0/35 in rebuilt feed), entitlement strip (Free = 3-pick shortlist server-side), providers resolve. 48 backend + 16 frontend unit + 6 e2e tests green.
+4. **Multi-tenant** — code-side done (row-level isolation audited on real PG, entitlements enforced server-side, shared rate budget, Degraded surfaced); ≥5 external users pending prod deploy (founder items: DOCKERHUB_TOKEN, Portainer stack, Cloudflared hostname).
 5. **Commercial gate** — Trakt commercial-API terms agreed; JustWatch deep-link decision made.
 
 ## Kill criteria

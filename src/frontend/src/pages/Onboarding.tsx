@@ -1,9 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
-import { useGetSessionQuery, useGetSyncStatusQuery, useUpdateSettingsMutation } from "../store/api";
+import { BarChart3, CalendarRange, Clapperboard, Sparkles, Tags, UserRound } from "lucide-react";
+import { api, useGetSessionQuery, useGetSyncStatusQuery, useUpdateSettingsMutation } from "../store/api";
 import { useOnboardingStream } from "../lib/onboardingStream";
-import { pollAdvance, type IngestKind } from "../store/onboardingSlice";
+import { useCountUp } from "../lib/useCountUp";
+import { pollAdvance, type IngestKind, type Insight } from "../store/onboardingSlice";
 import type { AppDispatch, RootState } from "../store";
 
 const COUNTER_LABELS: Record<IngestKind, string> = {
@@ -22,10 +24,28 @@ const STAGE_COPY: Record<string, string> = {
   failed: "Something went wrong.",
 };
 
+const INSIGHT_ICONS: Record<Insight["kind"], typeof Sparkles> = {
+  library: Clapperboard,
+  genre: Tags,
+  era: CalendarRange,
+  creator: UserRound,
+  tone: Sparkles,
+  stat: BarChart3,
+};
+
+function Ticker({ kind, value }: { kind: IngestKind; value: number }) {
+  const display = useCountUp(value);
+  return (
+    <div className="fa-card px-4 py-3 text-center reel-rise">
+      <div className="fa-stat-value">{display.toLocaleString()}</div>
+      <div className="fa-stat-label">{COUNTER_LABELS[kind]}</div>
+    </div>
+  );
+}
+
 /**
- * M1 shell of the live build-up show: real SSE stages and counters rendered as staged text.
- * The full theatrics (odometer tickers, DNA assembly, frost-melt reveal) layer onto this same
- * slice/event contract in M3 — no rework, only presentation.
+ * The live build-up show: the wait IS the wow. Every number and insight on screen is a real
+ * byproduct of the pipeline — never theatre. The reveal melts the frost veil into the feed.
  */
 export default function Onboarding() {
   const dispatch = useDispatch<AppDispatch>();
@@ -33,12 +53,12 @@ export default function Onboarding() {
   const onboarding = useSelector((s: RootState) => s.onboarding);
   const { data: session } = useGetSessionQuery();
   const [updateSettings] = useUpdateSettingsMutation();
+  const [melting, setMelting] = useState(false);
 
   const streaming = onboarding.stage !== "reveal" && onboarding.stage !== "failed";
   useOnboardingStream(streaming);
 
-  // Authoritative fallback: while on this page, poll sync status; poll data may advance the
-  // show past a stalled SSE stream (the poll wins — fa.foresight contract).
+  // Authoritative fallback: the status poll can advance a stalled show (poll wins).
   const { data: syncStatus } = useGetSyncStatusQuery(undefined, {
     pollingInterval: streaming ? 15_000 : 0,
   });
@@ -46,16 +66,24 @@ export default function Onboarding() {
     if (syncStatus) dispatch(pollAdvance({ pipelineStage: syncStatus.pipelineStage }));
   }, [syncStatus, dispatch]);
 
+  // Prefetch the feed the moment the reveal is reachable — entry must feel instant.
+  useEffect(() => {
+    if (onboarding.stage === "fitting" || onboarding.stage === "reveal") {
+      dispatch(api.util.prefetch("getFeed", undefined, { force: false }));
+    }
+  }, [onboarding.stage, dispatch]);
+
   const enterApp = async () => {
-    await updateSettings({ onboarded: true }).unwrap().catch(() => undefined);
-    navigate("/home");
+    setMelting(true);
+    updateSettings({ onboarded: true });
+    window.setTimeout(() => navigate("/home"), 620);
   };
 
   const counters = Object.entries(onboarding.counters) as [IngestKind, number][];
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6">
-      <div className="w-full max-w-2xl space-y-8 reel-rise">
+    <div className="min-h-screen flex items-center justify-center px-6 relative overflow-hidden">
+      <div className={`w-full max-w-2xl space-y-8 ${melting ? "reel-melt" : ""}`}>
         <div className="text-center space-y-2">
           <div className="text-3xl font-light tracking-wide text-fa-frost-bright">Reel</div>
           {session && (
@@ -63,34 +91,35 @@ export default function Onboarding() {
               Hello, {onboarding.traktUser ?? session.traktSlug}
             </p>
           )}
-          <p className="fa-body text-fa-frost">{STAGE_COPY[onboarding.stage]}</p>
-          {onboarding.stalled && onboarding.stage !== "reveal" && (
-            <p className="fa-caption text-fa-frost-dim animate-pulse">
+          <p className="fa-body text-fa-frost" data-testid="stage-copy">
+            {STAGE_COPY[onboarding.stage]}
+          </p>
+          {onboarding.stalled && streaming && (
+            <p className="fa-caption text-fa-frost-dim animate-pulse" data-testid="stall-notice">
               Still working — large libraries take a minute…
             </p>
           )}
         </div>
 
         {counters.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" data-testid="tickers">
             {counters.map(([kind, found]) => (
-              <div key={kind} className="fa-card px-4 py-3 text-center">
-                <div className="fa-stat-value" key={found}>
-                  <span className="fa-shimmer">{found.toLocaleString()}</span>
-                </div>
-                <div className="fa-stat-label">{COUNTER_LABELS[kind]}</div>
-              </div>
+              <Ticker key={kind} kind={kind} value={found} />
             ))}
           </div>
         )}
 
         {onboarding.insights.length > 0 && (
-          <div className="space-y-2">
-            {onboarding.insights.slice(-4).map((insight) => (
-              <p key={insight.id} className="fa-body text-fa-frost/90 reel-rise text-center">
-                {insight.text}
-              </p>
-            ))}
+          <div className="space-y-2" data-testid="insights">
+            {onboarding.insights.slice(-4).map((insight) => {
+              const Icon = INSIGHT_ICONS[insight.kind] ?? Sparkles;
+              return (
+                <div key={insight.id} className="fa-card px-4 py-2.5 flex items-center gap-3 reel-rise">
+                  <Icon className="h-4 w-4 text-fa-frost shrink-0" />
+                  <p className="fa-body text-fa-frost/90">{insight.text}</p>
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -108,9 +137,16 @@ export default function Onboarding() {
           </div>
         )}
 
-        {onboarding.stage === "reveal" && (
-          <div className="text-center">
-            <button onClick={enterApp} className="fa-button-primary text-base px-6 py-3">
+        {onboarding.stage === "reveal" && !melting && (
+          <div className="text-center space-y-4 reel-rise" data-testid="reveal">
+            <div className="fa-card px-8 py-6 space-y-3 border-fa-frost/30">
+              <Sparkles className="h-6 w-6 text-fa-frost mx-auto" />
+              <p className="fa-section-title text-base">Your taste DNA is ready</p>
+              <p className="fa-caption text-fa-frost-dim">
+                Model trained on your ratings — every pick comes with the reason and a predicted rating.
+              </p>
+            </div>
+            <button onClick={enterApp} className="fa-button-primary text-base px-6 py-3" data-testid="enter-app">
               See tonight&apos;s picks
             </button>
           </div>
