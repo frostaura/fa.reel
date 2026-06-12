@@ -28,4 +28,16 @@ public interface ITraktClient
 
     /// <summary>The 1-call delta gate: raw /sync/last_activities JSON for snapshot diffing.</summary>
     Task<string> GetLastActivitiesRawAsync(string accessToken, RatePriority priority, CancellationToken ct = default);
+
+    /// <summary>Resolves a TMDB id to its Trakt id (discovery titles lack one until write-back).</summary>
+    Task<long?> ResolveTraktIdByTmdbAsync(string accessToken, long tmdbId, bool movie, RatePriority priority, CancellationToken ct = default);
+
+    /// <summary>Posts a batched /sync/* payload (ratings, history, watchlist — add or remove endpoints).</summary>
+    Task PostSyncBatchAsync(string accessToken, string endpoint, object payload, RatePriority priority, CancellationToken ct = default);
+
+    /// <summary>Finds or creates the named personal list and returns its Trakt id.</summary>
+    Task<long> EnsureListAsync(string accessToken, string name, string description, RatePriority priority, CancellationToken ct = default);
+
+    /// <summary>Adds or removes items on a personal list.</summary>
+    Task PostListItemsAsync(string accessToken, long listId, object payload, bool remove, RatePriority priority, CancellationToken ct = default);
 }

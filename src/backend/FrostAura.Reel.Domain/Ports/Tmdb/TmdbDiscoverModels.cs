@@ -22,17 +22,40 @@ public static class TmdbGenres
 {
     public static readonly IReadOnlyDictionary<int, string> MovieIdToSlug = new Dictionary<int, string>
     {
-        [28] = "action", [12] = "adventure", [16] = "animation", [35] = "comedy", [80] = "crime",
-        [99] = "documentary", [18] = "drama", [10751] = "family", [14] = "fantasy", [36] = "history",
-        [27] = "horror", [10402] = "music", [9648] = "mystery", [10749] = "romance",
-        [878] = "science-fiction", [53] = "thriller", [10752] = "war", [37] = "western",
+        [28] = "action",
+        [12] = "adventure",
+        [16] = "animation",
+        [35] = "comedy",
+        [80] = "crime",
+        [99] = "documentary",
+        [18] = "drama",
+        [10751] = "family",
+        [14] = "fantasy",
+        [36] = "history",
+        [27] = "horror",
+        [10402] = "music",
+        [9648] = "mystery",
+        [10749] = "romance",
+        [878] = "science-fiction",
+        [53] = "thriller",
+        [10752] = "war",
+        [37] = "western",
     };
 
     public static readonly IReadOnlyDictionary<int, string> TvIdToSlug = new Dictionary<int, string>
     {
-        [10759] = "action", [16] = "animation", [35] = "comedy", [80] = "crime", [99] = "documentary",
-        [18] = "drama", [10751] = "family", [10762] = "family", [9648] = "mystery",
-        [10765] = "science-fiction", [10768] = "war", [37] = "western",
+        [10759] = "action",
+        [16] = "animation",
+        [35] = "comedy",
+        [80] = "crime",
+        [99] = "documentary",
+        [18] = "drama",
+        [10751] = "family",
+        [10762] = "family",
+        [9648] = "mystery",
+        [10765] = "science-fiction",
+        [10768] = "war",
+        [37] = "western",
     };
 
     /// <summary>Slug → (movie genre id, tv genre id); null when that medium has no equivalent.</summary>

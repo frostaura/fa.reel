@@ -126,6 +126,72 @@ public class TraktClient(
         return await response.Content.ReadFromJsonAsync<T>(JsonOptions, ct);
     }
 
+    public async Task<long?> ResolveTraktIdByTmdbAsync(string accessToken, long tmdbId, bool movie, RatePriority priority, CancellationToken ct = default)
+    {
+        var type = movie ? "movie" : "show";
+        var results = await GetApiAsync<List<SearchResultDto>>($"search/tmdb/{tmdbId}?type={type}", accessToken, priority, ct);
+        var match = results?.FirstOrDefault();
+        return movie ? match?.Movie?.Ids?.Trakt : match?.Show?.Ids?.Trakt;
+    }
+
+    public async Task PostSyncBatchAsync(string accessToken, string endpoint, object payload, RatePriority priority, CancellationToken ct = default)
+    {
+        await rateGate.AcquireAsync(priority, ct);
+        usageRecorder.Record(ApiProvider.Trakt);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
+        {
+            Content = JsonContent.Create(payload, options: JsonOptions),
+        };
+        ApplyApiHeaders(request, accessToken);
+        using var response = await httpClient.SendAsync(request, ct);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task<long> EnsureListAsync(string accessToken, string name, string description, RatePriority priority, CancellationToken ct = default)
+    {
+        var lists = await GetApiAsync<List<ListDtoTrakt>>("users/me/lists", accessToken, priority, ct) ?? [];
+        var existing = lists.FirstOrDefault(l => string.Equals(l.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (existing?.Ids?.Trakt is { } id)
+        {
+            return id;
+        }
+
+        await rateGate.AcquireAsync(priority, ct);
+        usageRecorder.Record(ApiProvider.Trakt);
+        using var request = new HttpRequestMessage(HttpMethod.Post, "users/me/lists")
+        {
+            Content = JsonContent.Create(new
+            {
+                name,
+                description,
+                privacy = "private",
+                display_numbers = false,
+                allow_comments = false,
+            }, options: JsonOptions),
+        };
+        ApplyApiHeaders(request, accessToken);
+        using var response = await httpClient.SendAsync(request, ct);
+        response.EnsureSuccessStatusCode();
+        var created = await response.Content.ReadFromJsonAsync<ListDtoTrakt>(JsonOptions, ct);
+        return created?.Ids?.Trakt ?? throw new InvalidOperationException("Trakt list creation returned no id.");
+    }
+
+    public Task PostListItemsAsync(string accessToken, long listId, object payload, bool remove, RatePriority priority, CancellationToken ct = default) =>
+        PostSyncBatchAsync(accessToken, $"users/me/lists/{listId}/items{(remove ? "/remove" : string.Empty)}", payload, priority, ct);
+
+    private sealed record SearchResultDto(
+        [property: JsonPropertyName("movie")] SubjectDto? Movie,
+        [property: JsonPropertyName("show")] SubjectDto? Show);
+
+    private sealed record SubjectDto([property: JsonPropertyName("ids")] SubjectIdsDto? Ids);
+
+    private sealed record SubjectIdsDto([property: JsonPropertyName("trakt")] long? Trakt);
+
+    private sealed record ListDtoTrakt(
+        [property: JsonPropertyName("name")] string? Name,
+        [property: JsonPropertyName("ids")] SubjectIdsDto? Ids);
+
     internal void ApplyApiHeaders(HttpRequestMessage request, string? accessToken)
     {
         request.Headers.Add("trakt-api-version", "2");

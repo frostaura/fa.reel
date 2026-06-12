@@ -86,6 +86,7 @@ public static class DependencyInjection
         // ── Pipeline: event hub, token store, ingestor, job handlers, schedulers ──────────
         services.AddSingleton<IPipelineEventHub, PipelineEventHub>();
         services.AddScoped<TraktTokenStore>();
+        services.AddScoped<Application.Sync.OutboxDispatcher>();
         services.AddScoped<Application.Ingestion.TraktLibraryIngestor>();
         services.AddScoped<IJobHandler, FullIngestJobHandler>();
         services.AddScoped<IJobHandler, DeltaSyncJobHandler>();
@@ -97,6 +98,7 @@ public static class DependencyInjection
         services.AddHostedService<TraktDeltaPollService>();
         services.AddHostedService<NightlyReconcileService>();
         services.AddHostedService<TokenRefreshService>();
+        services.AddHostedService<TraktOutboxDispatcherService>();
 
         return services;
     }

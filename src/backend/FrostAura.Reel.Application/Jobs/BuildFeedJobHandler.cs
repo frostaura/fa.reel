@@ -170,10 +170,10 @@ public class BuildFeedJobHandler(
             .ToDictionary(
                 g => g.Key,
                 g => g.Select(c => new
-                    {
-                        c.Name,
-                        Affinity = TasteMath.ShrunkenMean(taste.PersonRatings[c.PersonId], taste.UserMean),
-                    })
+                {
+                    c.Name,
+                    Affinity = TasteMath.ShrunkenMean(taste.PersonRatings[c.PersonId], taste.UserMean),
+                })
                     .OrderByDescending(x => x.Affinity)
                     .First());
 
