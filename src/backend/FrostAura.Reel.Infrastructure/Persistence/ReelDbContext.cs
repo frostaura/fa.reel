@@ -110,7 +110,7 @@ public class ReelDbContext(DbContextOptions<ReelDbContext> options, IAccountCont
         // ── Catalog ────────────────────────────────────────────────────────────────────────
         modelBuilder.Entity<Title>(e =>
         {
-            e.HasIndex(t => new { t.MediaType, t.TraktId }).IsUnique();
+            e.HasIndex(t => new { t.MediaType, t.TraktId }).IsUnique().HasFilter("\"TraktId\" IS NOT NULL");
             e.HasIndex(t => new { t.MediaType, t.TmdbId }).IsUnique().HasFilter("\"TmdbId\" IS NOT NULL");
             e.HasIndex(t => t.Name).HasMethod("gin").HasOperators("gin_trgm_ops");
             e.HasIndex(t => t.TmdbPopularity).IsDescending();

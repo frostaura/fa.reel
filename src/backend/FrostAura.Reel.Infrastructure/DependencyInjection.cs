@@ -78,6 +78,11 @@ public static class DependencyInjection
         services.AddScoped<Application.Ml.FeatureVectorBuilder>();
         services.AddScoped<Application.Ml.EvalHarness>();
 
+        // ── Serving pipeline ─────────────────────────────────────────────────────────────
+        services.AddScoped<Application.Search.EligibilityQueryBuilder>();
+        services.AddScoped<Application.Ranking.CandidateGenerator>();
+        services.AddScoped<Application.Ingestion.TitleHydrator>();
+
         // ── Pipeline: event hub, token store, ingestor, job handlers, schedulers ──────────
         services.AddSingleton<IPipelineEventHub, PipelineEventHub>();
         services.AddScoped<TraktTokenStore>();
@@ -87,6 +92,7 @@ public static class DependencyInjection
         services.AddScoped<IJobHandler, HydrateCatalogJobHandler>();
         services.AddScoped<IJobHandler, TrainJobHandler>();
         services.AddScoped<IJobHandler, EvaluateJobHandler>();
+        services.AddScoped<IJobHandler, BuildFeedJobHandler>();
         services.AddHostedService<JobRunnerService>();
         services.AddHostedService<TraktDeltaPollService>();
         services.AddHostedService<NightlyReconcileService>();

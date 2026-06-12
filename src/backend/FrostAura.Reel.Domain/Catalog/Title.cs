@@ -1,8 +1,9 @@
 namespace FrostAura.Reel.Domain.Catalog;
 
 /// <summary>
-/// Canonical movie/show row — global catalog, shared by every tenant. Keyed off Trakt ids
-/// (the ingest source of truth); TMDB ids hydrate metadata, artwork, and providers.
+/// Canonical movie/show row — global catalog, shared by every tenant. Trakt-ingested titles
+/// carry Trakt ids; discovery candidates arrive from TMDB with only a TMDB id (their Trakt id
+/// resolves lazily at write-back time). At least one external id is always present.
 /// </summary>
 public class Title
 {
@@ -10,7 +11,7 @@ public class Title
 
     public MediaType MediaType { get; set; }
 
-    public long TraktId { get; set; }
+    public long? TraktId { get; set; }
 
     public string TraktSlug { get; set; } = string.Empty;
 

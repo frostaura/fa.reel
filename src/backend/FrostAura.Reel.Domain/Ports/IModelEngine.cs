@@ -11,10 +11,16 @@ public record TrainedModel(byte[] ArtifactBytes, IReadOnlyDictionary<string, dou
 /// engine trains both the throwaway split-models of the eval harness and the serving model,
 /// so the gate measures exactly what production ships.
 /// </summary>
+/// <summary>One scored row: prediction + its top signed feature contributions (for why-this).</summary>
+public record ScoredRow(float Score, IReadOnlyList<(string Feature, float Contribution)> TopContributions);
+
 public interface IModelEngine
 {
     TrainedModel Train(TrainingMatrix matrix, string hyperparamsJson);
 
     /// <summary>Scores feature rows with a serialized artifact (batch; row-aligned result).</summary>
     float[] Score(byte[] artifactBytes, float[][] features);
+
+    /// <summary>Scores with per-row feature contributions — the explainability contract behind every card.</summary>
+    ScoredRow[] ScoreWithContributions(byte[] artifactBytes, float[][] features, string[] featureNames, int topK = 5);
 }

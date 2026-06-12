@@ -169,7 +169,7 @@ public class TraktLibraryIngestor(
             .Where(p => p.AccountId == accountId)
             .OrderByDescending(p => p.ResumeLikelihood)
             .Take(budget)
-            .Join(db.Titles, p => p.TitleId, t => t.Id, (p, t) => new { Progress = p, t.TraktId })
+            .Join(db.Titles.Where(t => t.TraktId != null), p => p.TitleId, t => t.Id, (p, t) => new { Progress = p, TraktId = t.TraktId!.Value })
             .ToListAsync(ct);
 
         foreach (var candidate in candidates)
@@ -203,11 +203,11 @@ public class TraktLibraryIngestor(
         foreach (var chunk in ids.Chunk(1000))
         {
             var titles = await db.Titles
-                .Where(t => t.MediaType == mediaType && chunk.Contains(t.TraktId))
+                .Where(t => t.MediaType == mediaType && t.TraktId != null && chunk.Contains(t.TraktId.Value))
                 .ToListAsync(ct);
             foreach (var title in titles)
             {
-                map[title.TraktId] = title;
+                map[title.TraktId!.Value] = title;
             }
         }
 

@@ -47,4 +47,31 @@ public class FastTreeModelEngineTests
         var engine = new FastTreeModelEngine();
         Assert.Empty(engine.Score([1, 2, 3], []));
     }
+
+    [Fact]
+    public void Contribution_scoring_attributes_the_planted_signal()
+    {
+        var rng = new Random(7);
+        var rows = new List<float[]>();
+        var labels = new List<float>();
+        for (var i = 0; i < 300; i++)
+        {
+            var a = (float)rng.NextDouble();
+            rows.Add([a, (float)rng.NextDouble()]);
+            labels.Add(Math.Clamp(3f + (6f * a), 1f, 10f));
+        }
+
+        var engine = new FastTreeModelEngine();
+        var trained = engine.Train(
+            new TrainingMatrix(rows.ToArray(), labels.ToArray(), ["signal", "noise"]),
+            """{"Trees":80,"Leaves":12,"MinExamplesPerLeaf":5,"LearningRate":0.2}""");
+
+        var scored = engine.ScoreWithContributions(trained.ArtifactBytes, [[0.9f, 0.5f]], ["signal", "noise"], topK: 2);
+
+        var row = Assert.Single(scored);
+        Assert.True(row.Score > 6f, $"high-signal row should predict high ({row.Score:F2})");
+        Assert.NotEmpty(row.TopContributions);
+        Assert.Equal("signal", row.TopContributions[0].Feature);
+        Assert.True(row.TopContributions[0].Contribution > 0);
+    }
 }

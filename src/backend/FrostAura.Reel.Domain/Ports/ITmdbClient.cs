@@ -13,4 +13,11 @@ public interface ITmdbClient
 
     /// <summary>TV details with credits+videos appended; null when TMDB 404s the id.</summary>
     Task<TmdbTitleDetails?> GetTvAsync(long tmdbId, CancellationToken ct = default);
+
+    /// <summary>Discover by genre/recency — the candidate-pool firehose.</summary>
+    Task<IReadOnlyList<TmdbListItem>> DiscoverAsync(
+        bool movies, int? genreId, string? region, DateTime? releasedAfter, int page, CancellationToken ct = default);
+
+    /// <summary>This week's trending titles (movie or tv).</summary>
+    Task<IReadOnlyList<TmdbListItem>> GetTrendingAsync(bool movies, CancellationToken ct = default);
 }

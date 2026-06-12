@@ -2,6 +2,7 @@ using System.Text.Json;
 using FrostAura.Reel.Domain.Ports;
 using Microsoft.ML;
 using Microsoft.ML.Data;
+using Microsoft.ML.Trainers;
 using Microsoft.ML.Trainers.FastTree;
 
 namespace FrostAura.Reel.Infrastructure.Ml;
@@ -23,6 +24,12 @@ public class FastTreeModelEngine : IModelEngine
     private sealed class Prediction
     {
         public float Score { get; set; }
+    }
+
+    private sealed class ContributionPrediction
+    {
+        public float Score { get; set; }
+        public float[] FeatureContributions { get; set; } = [];
     }
 
     public TrainedModel Train(TrainingMatrix matrix, string hyperparamsJson)
@@ -88,6 +95,45 @@ public class FastTreeModelEngine : IModelEngine
         var scored = model.Transform(data);
         return ml.Data.CreateEnumerable<Prediction>(scored, reuseRowObject: false)
             .Select(p => p.Score)
+            .ToArray();
+    }
+
+    public ScoredRow[] ScoreWithContributions(byte[] artifactBytes, float[][] features, string[] featureNames, int topK = 5)
+    {
+        if (features.Length == 0)
+        {
+            return [];
+        }
+
+        var ml = new MLContext(seed: 7);
+        using var stream = new MemoryStream(artifactBytes);
+        var loaded = ml.Model.Load(stream, out _);
+
+        if (loaded is not ISingleFeaturePredictionTransformer<ICalculateFeatureContribution> predictor)
+        {
+            // Chained pipelines would need unwrapping; our artifacts are single FastTree transformers.
+            throw new InvalidOperationException($"Artifact is not a contribution-capable transformer ({loaded.GetType().Name}).");
+        }
+
+        var width = features[0].Length;
+        var data = ml.Data.LoadFromEnumerable(
+            features.Select(f => new Row { Features = f }),
+            SchemaDefinitionFor(width));
+
+        var withContributions = ml.Transforms
+            .CalculateFeatureContribution(predictor, numberOfPositiveContributions: width, numberOfNegativeContributions: width)
+            .Fit(data)
+            .Transform(predictor.Transform(data));
+
+        return ml.Data.CreateEnumerable<ContributionPrediction>(withContributions, reuseRowObject: false)
+            .Select(p => new ScoredRow(
+                p.Score,
+                p.FeatureContributions
+                    .Select((value, index) => (Feature: index < featureNames.Length ? featureNames[index] : $"f{index}", Contribution: value))
+                    .Where(c => Math.Abs(c.Contribution) > 1e-6)
+                    .OrderByDescending(c => Math.Abs(c.Contribution))
+                    .Take(topK)
+                    .ToList()))
             .ToArray();
     }
 

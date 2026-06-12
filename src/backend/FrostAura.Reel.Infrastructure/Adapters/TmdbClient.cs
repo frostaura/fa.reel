@@ -34,6 +34,83 @@ public class TmdbClient(
     public Task<TmdbTitleDetails?> GetTvAsync(long tmdbId, CancellationToken ct = default) =>
         GetDetailsAsync($"tv/{tmdbId}?append_to_response=credits,videos", ct);
 
+    public async Task<IReadOnlyList<TmdbListItem>> DiscoverAsync(
+        bool movies, int? genreId, string? region, DateTime? releasedAfter, int page, CancellationToken ct = default)
+    {
+        var path = movies ? "discover/movie" : "discover/tv";
+        var query = $"?sort_by=popularity.desc&include_adult=false&page={page}&vote_count.gte=50";
+        if (genreId is { } genre)
+        {
+            query += $"&with_genres={genre}";
+        }
+
+        if (releasedAfter is { } after)
+        {
+            var dateField = movies ? "primary_release_date" : "first_air_date";
+            query += $"&{dateField}.gte={after:yyyy-MM-dd}";
+        }
+
+        if (movies && region is { Length: 2 })
+        {
+            query += $"&region={region}";
+        }
+
+        return await GetListAsync(path + query, movies, ct);
+    }
+
+    public Task<IReadOnlyList<TmdbListItem>> GetTrendingAsync(bool movies, CancellationToken ct = default) =>
+        GetListAsync(movies ? "trending/movie/week" : "trending/tv/week", movies, ct);
+
+    private async Task<IReadOnlyList<TmdbListItem>> GetListAsync(string path, bool movies, CancellationToken ct)
+    {
+        await rateGate.AcquireAsync(RatePriority.Reconcile, ct);
+        usageRecorder.Record(ApiProvider.Tmdb);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, path);
+        var token = configuration["TMDB_READ_ACCESS_TOKEN"]
+            ?? throw new InvalidOperationException("TMDB_READ_ACCESS_TOKEN is required.");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        using var response = await httpClient.SendAsync(request, ct);
+        response.EnsureSuccessStatusCode();
+        var dto = await response.Content.ReadFromJsonAsync<ListDto>(JsonOptions, ct);
+
+        return (dto?.Results ?? [])
+            .Where(r => r.Id > 0 && (r.Title ?? r.Name) is not null)
+            .Select(r => new TmdbListItem(
+                r.Id,
+                movies,
+                (r.Title ?? r.Name)!,
+                r.PosterPath,
+                r.BackdropPath,
+                r.Overview,
+                r.Popularity,
+                r.VoteAverage,
+                r.VoteCount,
+                ParseDate(r.ReleaseDate ?? r.FirstAirDate),
+                r.GenreIds ?? []))
+            .ToList();
+    }
+
+    private static DateTime? ParseDate(string? value) =>
+        DateTime.TryParse(value, out var parsed) ? DateTime.SpecifyKind(parsed, DateTimeKind.Utc) : null;
+
+    private sealed record ListDto(ListResultDto[]? Results);
+
+    private sealed record ListResultDto(
+        long Id,
+        string? Title,
+        string? Name,
+        [property: JsonPropertyName("poster_path")] string? PosterPath,
+        [property: JsonPropertyName("backdrop_path")] string? BackdropPath,
+        string? Overview,
+        decimal Popularity,
+        [property: JsonPropertyName("vote_average")] decimal VoteAverage,
+        [property: JsonPropertyName("vote_count")] int VoteCount,
+        [property: JsonPropertyName("release_date")] string? ReleaseDate,
+        [property: JsonPropertyName("first_air_date")] string? FirstAirDate,
+        [property: JsonPropertyName("genre_ids")] int[]? GenreIds);
+
     private async Task<TmdbTitleDetails?> GetDetailsAsync(string path, CancellationToken ct)
     {
         await rateGate.AcquireAsync(RatePriority.Backfill, ct);

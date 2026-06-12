@@ -46,6 +46,23 @@ public class EvaluateJobHandler(
 
         job.ProgressMessage =
             $"iteration {outcome.Run.Iteration}: lift {outcome.Result.RelativeImprovement:P0} — gate {(outcome.Result.PassedGate ? "passed" : "not met")}";
+
+        // Chain: a validated model feeds the feed.
+        var hasFeedBuild = await db.SyncJobs.AnyAsync(
+            j => j.AccountId == accountId && j.Kind == JobKind.BuildFeed
+                && (j.Status == JobStatus.Pending || j.Status == JobStatus.Running), ct);
+        if (!hasFeedBuild)
+        {
+            db.SyncJobs.Add(new SyncJob
+            {
+                Id = Guid.NewGuid(),
+                AccountId = accountId,
+                Kind = JobKind.BuildFeed,
+                Priority = 1,
+                EnqueuedAt = DateTime.UtcNow,
+            });
+        }
+
         await db.SaveChangesAsync(ct);
 
         logger.LogInformation("Evaluate completed for {AccountId}: {Message}", accountId, job.ProgressMessage);
