@@ -1,0 +1,138 @@
+# Production stack — the file content behind the Portainer stack for reel.frostaura.net.
+# Mirrors docker-compose.yml but pulls published multi-arch images instead of building.
+# CI's deploy-portainer job triggers a re-pull + redeploy of this stack after every main push.
+# Cloudflared maps reel.frostaura.net → http://gateway:80 (this host's GATEWAY_PORT).
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-reel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-reel}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-reel} -d ${POSTGRES_DB:-reel}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    image: ${DOCKERHUB_USERNAME:-frostaura}/reel-backend:latest
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:5000
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=${POSTGRES_DB:-reel};Username=${POSTGRES_USER:-reel};Password=${POSTGRES_PASSWORD}
+      Database__AutoMigrateOnStartup: ${Database__AutoMigrateOnStartup:-true}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_ISSUER: ${JWT_ISSUER:-frostaura-reel}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-frostaura-reel-app}
+      JWT_ACCESS_TOKEN_EXPIRY_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRY_MINUTES:-15}
+      JWT_REFRESH_TOKEN_EXPIRY_DAYS: ${JWT_REFRESH_TOKEN_EXPIRY_DAYS:-30}
+      TRAKT_CLIENT_ID: ${TRAKT_CLIENT_ID:?TRAKT_CLIENT_ID is required}
+      TRAKT_CLIENT_SECRET: ${TRAKT_CLIENT_SECRET:?TRAKT_CLIENT_SECRET is required}
+      TRAKT_REDIRECT_URI: ${TRAKT_REDIRECT_URI:-https://reel.frostaura.net/auth/trakt/callback}
+      TRAKT_RATE_BUDGET_PER_5MIN: ${TRAKT_RATE_BUDGET_PER_5MIN:-900}
+      TRAKT_POST_BUDGET_PER_SEC: ${TRAKT_POST_BUDGET_PER_SEC:-1}
+      TMDB_READ_ACCESS_TOKEN: ${TMDB_READ_ACCESS_TOKEN:?TMDB_READ_ACCESS_TOKEN is required}
+      TMDB_RATE_PER_SEC: ${TMDB_RATE_PER_SEC:-40}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-4o-mini}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENROUTER_MAX_CONCURRENCY: ${OPENROUTER_MAX_CONCURRENCY:-4}
+      EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-local}
+      EMBEDDINGS_MODEL: ${EMBEDDINGS_MODEL:-all-MiniLM-L6-v2}
+      EMBEDDINGS_DIMENSIONS: ${EMBEDDINGS_DIMENSIONS:-384}
+      SYNC_DELTA_MINUTES: ${SYNC_DELTA_MINUTES:-15}
+      SYNC_HOT_MINUTES: ${SYNC_HOT_MINUTES:-5}
+      RETRAIN_MIN_NEW_RATINGS: ${RETRAIN_MIN_NEW_RATINGS:-10}
+      GEOIP_DEFAULT_REGION: ${GEOIP_DEFAULT_REGION:-US}
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-https://reel.frostaura.net}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://reel.frostaura.net}
+    healthcheck:
+      test: [ "CMD-SHELL", "curl --fail --silent http://127.0.0.1:5000/health >/dev/null || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    image: ${DOCKERHUB_USERNAME:-frostaura}/reel-frontend:latest
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+  gateway:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "${GATEWAY_PORT:-8090}:80"
+    configs:
+      - source: gateway_nginx
+        target: /etc/nginx/nginx.conf
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+
+# Portainer stacks can't mount repo files; ship the gateway config inline. Static (no envsubst):
+# service ports are fixed inside the stack network. nginx runtime variables are escaped as $$
+# so compose interpolation leaves them for nginx.
+configs:
+  gateway_nginx:
+    content: |
+      worker_processes auto;
+      error_log /var/log/nginx/error.log warn;
+      pid /tmp/nginx.pid;
+      events { worker_connections 1024; }
+      http {
+        include /etc/nginx/mime.types;
+        default_type application/octet-stream;
+        sendfile on;
+        keepalive_timeout 65;
+        upstream backend_upstream { server backend:5000; }
+        upstream frontend_upstream { server frontend:80; }
+        server {
+          listen 80;
+          server_name _;
+          location /api/ {
+            proxy_pass http://backend_upstream/api/;
+            proxy_set_header Host $$http_host;
+            proxy_set_header X-Real-IP $$remote_addr;
+            proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $$scheme;
+            proxy_set_header CF-IPCountry $$http_cf_ipcountry;
+            client_max_body_size 10m;
+          }
+          location /sse/ {
+            proxy_pass http://backend_upstream/sse/;
+            proxy_set_header Host $$host;
+            proxy_set_header X-Real-IP $$remote_addr;
+            proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $$scheme;
+            proxy_set_header Connection '';
+            proxy_http_version 1.1;
+            chunked_transfer_encoding off;
+            proxy_buffering off;
+            proxy_cache off;
+            proxy_read_timeout 86400s;
+          }
+          location /health { proxy_pass http://backend_upstream/health; }
+          location / {
+            proxy_pass http://frontend_upstream;
+            proxy_set_header Host $$host;
+            proxy_set_header X-Real-IP $$remote_addr;
+            proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $$scheme;
+          }
+        }
+      }
+
+volumes:
+  postgres_data:

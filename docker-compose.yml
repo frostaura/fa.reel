@@ -1,0 +1,100 @@
+services:
+  postgres:
+    # pgvector-enabled Postgres — deliberate deviation from the postgres:16-alpine FrostAura
+    # default: Reel's embeddings (vector(384) + HNSW) and trigram search need the extensions
+    # compiled in. First FrostAura project on this image.
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-reel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-reel}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-reel} -d ${POSTGRES_DB:-reel}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: ./src/backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: http://+:5000
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=${POSTGRES_DB:-reel};Username=${POSTGRES_USER:-reel};Password=${POSTGRES_PASSWORD}
+      Database__AutoMigrateOnStartup: ${Database__AutoMigrateOnStartup:-true}
+      # App session JWTs (fa.startup naming)
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_ISSUER: ${JWT_ISSUER:-frostaura-reel}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-frostaura-reel-app}
+      JWT_ACCESS_TOKEN_EXPIRY_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRY_MINUTES:-15}
+      JWT_REFRESH_TOKEN_EXPIRY_DAYS: ${JWT_REFRESH_TOKEN_EXPIRY_DAYS:-30}
+      # Trakt
+      TRAKT_CLIENT_ID: ${TRAKT_CLIENT_ID:-}
+      TRAKT_CLIENT_SECRET: ${TRAKT_CLIENT_SECRET:-}
+      TRAKT_REDIRECT_URI: ${TRAKT_REDIRECT_URI:-http://localhost:5173/auth/trakt/callback}
+      TRAKT_RATE_BUDGET_PER_5MIN: ${TRAKT_RATE_BUDGET_PER_5MIN:-900}
+      TRAKT_POST_BUDGET_PER_SEC: ${TRAKT_POST_BUDGET_PER_SEC:-1}
+      # TMDB
+      TMDB_READ_ACCESS_TOKEN: ${TMDB_READ_ACCESS_TOKEN:-}
+      TMDB_RATE_PER_SEC: ${TMDB_RATE_PER_SEC:-40}
+      # OpenRouter (fa.startup naming) — all LLM calls route through this gateway
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-4o-mini}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENROUTER_MAX_CONCURRENCY: ${OPENROUTER_MAX_CONCURRENCY:-4}
+      # Embeddings
+      EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-local}
+      EMBEDDINGS_MODEL: ${EMBEDDINGS_MODEL:-all-MiniLM-L6-v2}
+      EMBEDDINGS_DIMENSIONS: ${EMBEDDINGS_DIMENSIONS:-384}
+      # Sync cadence
+      SYNC_DELTA_MINUTES: ${SYNC_DELTA_MINUTES:-15}
+      SYNC_HOT_MINUTES: ${SYNC_HOT_MINUTES:-5}
+      RETRAIN_MIN_NEW_RATINGS: ${RETRAIN_MIN_NEW_RATINGS:-10}
+      # Region default when CF-IPCountry is absent
+      GEOIP_DEFAULT_REGION: ${GEOIP_DEFAULT_REGION:-US}
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:8090}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:8090,http://localhost:5173}
+      TestHelpers__ModelStubMode: ${TestHelpers__ModelStubMode:-false}
+    healthcheck:
+      test: [ "CMD-SHELL", "curl --fail --silent http://127.0.0.1:5000/health >/dev/null || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: ./src/frontend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+  gateway:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "${GATEWAY_PORT:-8090}:80"
+    environment:
+      NGINX_ENVSUBST_OUTPUT_DIR: /etc/nginx
+      NGINX_BACKEND_PORT: ${NGINX_BACKEND_PORT:-5000}
+      NGINX_FRONTEND_PORT: ${NGINX_FRONTEND_PORT:-80}
+      NGINX_CLIENT_MAX_BODY_SIZE: ${NGINX_CLIENT_MAX_BODY_SIZE:-10m}
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/templates/nginx.conf.template:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+
+volumes:
+  postgres_data:
