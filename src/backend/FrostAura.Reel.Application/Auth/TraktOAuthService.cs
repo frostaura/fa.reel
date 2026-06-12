@@ -51,6 +51,15 @@ public class TraktOAuthService(
         }
 
         var tokens = await traktClient.ExchangeCodeAsync(code, ct);
+        return await LinkAccountAsync(tokens, countryHint, ct);
+    }
+
+    /// <summary>
+    /// Shared link core: profile fetch → Account/TraktConnection upsert → first pipeline job.
+    /// Used by the OAuth callback and (Development only) the QA dev-link helper.
+    /// </summary>
+    public async Task<CallbackResult> LinkAccountAsync(Domain.Ports.Trakt.TraktTokenResponse tokens, string? countryHint, CancellationToken ct = default)
+    {
         var profile = await traktClient.GetUserSettingsAsync(tokens.AccessToken, ct);
 
         var now = DateTime.UtcNow;
