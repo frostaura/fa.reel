@@ -32,7 +32,9 @@ public class TmdbClient(
         GetDetailsAsync($"movie/{tmdbId}?append_to_response=credits,videos,keywords", ct);
 
     public Task<TmdbTitleDetails?> GetTvAsync(long tmdbId, CancellationToken ct = default) =>
-        GetDetailsAsync($"tv/{tmdbId}?append_to_response=credits,videos,keywords", ct);
+        // aggregate_credits = the full series regulars (across seasons), not one episode's cast —
+        // far better signal for cast/crew affinity than plain credits.
+        GetDetailsAsync($"tv/{tmdbId}?append_to_response=aggregate_credits,videos,keywords", ct);
 
     public async Task<IReadOnlyList<TmdbListItem>> DiscoverAsync(
         bool movies, int? genreId, string? region, DateTime? releasedAfter, int page, CancellationToken ct = default)
@@ -265,18 +267,39 @@ public class TmdbClient(
             return null;
         }
 
-        // TV credits: prefer aggregate? v1 keeps plain credits (current cast) — adequate for affinity.
-        var cast = (dto.Credits?.Cast ?? [])
-            .OrderBy(c => c.Order)
-            .Take(12)
-            .Select(c => new TmdbCastMember(c.Id, c.Name ?? string.Empty, c.Character, c.Order, c.ProfilePath, c.KnownForDepartment))
-            .ToArray();
-
-        var crew = (dto.Credits?.Crew ?? [])
-            .Where(c => c.Job is "Director" or "Writer" or "Screenplay" or "Novel" || c.Department is "Writing")
-            .Take(12)
-            .Select(c => new TmdbCrewMember(c.Id, c.Name ?? string.Empty, c.Job, c.Department, c.ProfilePath))
-            .ToArray();
+        // TV sends aggregate_credits (series-wide roles); movies send plain credits. Normalise both
+        // into the same cast/crew shape.
+        TmdbCastMember[] cast;
+        TmdbCrewMember[] crew;
+        if (dto.AggregateCredits is { } agg)
+        {
+            cast = (agg.Cast ?? [])
+                .OrderBy(c => c.Order)
+                .Take(12)
+                .Select(c => new TmdbCastMember(c.Id, c.Name ?? string.Empty, c.Roles?.FirstOrDefault()?.Character, c.Order, c.ProfilePath, c.KnownForDepartment))
+                .ToArray();
+            crew = (agg.Crew ?? [])
+                .Where(c => c.Department is "Writing" || (c.Jobs ?? []).Any(j => j.Job is "Director" or "Writer" or "Screenplay" or "Novel"))
+                .Take(12)
+                .Select(c => new TmdbCrewMember(
+                    c.Id, c.Name ?? string.Empty,
+                    (c.Jobs ?? []).FirstOrDefault(j => j.Job is "Director" or "Writer" or "Screenplay" or "Novel")?.Job ?? c.Jobs?.FirstOrDefault()?.Job,
+                    c.Department, c.ProfilePath))
+                .ToArray();
+        }
+        else
+        {
+            cast = (dto.Credits?.Cast ?? [])
+                .OrderBy(c => c.Order)
+                .Take(12)
+                .Select(c => new TmdbCastMember(c.Id, c.Name ?? string.Empty, c.Character, c.Order, c.ProfilePath, c.KnownForDepartment))
+                .ToArray();
+            crew = (dto.Credits?.Crew ?? [])
+                .Where(c => c.Job is "Director" or "Writer" or "Screenplay" or "Novel" || c.Department is "Writing")
+                .Take(12)
+                .Select(c => new TmdbCrewMember(c.Id, c.Name ?? string.Empty, c.Job, c.Department, c.ProfilePath))
+                .ToArray();
+        }
 
         // Official YouTube trailer, else any YouTube trailer.
         var videos = dto.Videos?.Results ?? [];
@@ -325,10 +348,32 @@ public class TmdbClient(
         string? Tagline,
         [property: JsonPropertyName("number_of_episodes")] int? NumberOfEpisodes,
         CreditsDto? Credits,
+        [property: JsonPropertyName("aggregate_credits")] AggregateCreditsDto? AggregateCredits,
         VideosDto? Videos,
         KeywordsDto? Keywords);
 
     private sealed record CreditsDto(CastDto[]? Cast, CrewDto[]? Crew);
+
+    private sealed record AggregateCreditsDto(AggCastDto[]? Cast, AggCrewDto[]? Crew);
+
+    private sealed record AggCastDto(
+        long Id,
+        string? Name,
+        int Order,
+        [property: JsonPropertyName("profile_path")] string? ProfilePath,
+        [property: JsonPropertyName("known_for_department")] string? KnownForDepartment,
+        AggRoleDto[]? Roles);
+
+    private sealed record AggRoleDto(string? Character);
+
+    private sealed record AggCrewDto(
+        long Id,
+        string? Name,
+        string? Department,
+        [property: JsonPropertyName("profile_path")] string? ProfilePath,
+        AggJobDto[]? Jobs);
+
+    private sealed record AggJobDto(string? Job);
 
     private sealed record CastDto(
         long Id,
