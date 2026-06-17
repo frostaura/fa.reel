@@ -53,12 +53,24 @@ public class OpenRouterAttributeExtractor(
             return inputs.Select(Stub).ToArray();
         }
 
+        // Bounded concurrency (OPENROUTER_MAX_CONCURRENCY, default 4) — one title per request,
+        // results written back in index order so the batch stays row-aligned for the caller.
+        var maxConcurrency = Math.Max(1, configuration.GetValue("OPENROUTER_MAX_CONCURRENCY", 4));
         var results = new ExtractedTitleAttributes?[inputs.Count];
-        for (var i = 0; i < inputs.Count; i++)
+        using var gate = new SemaphoreSlim(maxConcurrency);
+        var tasks = inputs.Select(async (input, index) =>
         {
-            ct.ThrowIfCancellationRequested();
-            results[i] = await ExtractOneAsync(inputs[i], ct);
-        }
+            await gate.WaitAsync(ct);
+            try
+            {
+                results[index] = await ExtractOneAsync(input, ct);
+            }
+            finally
+            {
+                gate.Release();
+            }
+        });
+        await Task.WhenAll(tasks);
 
         return results;
     }

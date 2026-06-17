@@ -34,7 +34,7 @@ public class EnrichCatalogJobHandler(
     public JobKind Kind => JobKind.EnrichCatalog;
 
     private const int EmbedBatch = 64;
-    private const int AttributeBatch = 8;
+    private const int AttributeBatch = 24; // the extractor parallelizes within a batch (bounded by OPENROUTER_MAX_CONCURRENCY)
     private const int MaxAttributeAttempts = 3;
 
     private enum Phase { Embeddings, Attributes }
