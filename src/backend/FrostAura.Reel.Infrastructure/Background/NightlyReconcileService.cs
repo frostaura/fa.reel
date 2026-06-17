@@ -1,3 +1,4 @@
+using FrostAura.Reel.Domain.Ml;
 using FrostAura.Reel.Domain.Sync;
 using FrostAura.Reel.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -9,9 +10,10 @@ using Microsoft.Extensions.Logging;
 namespace FrostAura.Reel.Infrastructure.Background;
 
 /// <summary>
-/// 03:00 UTC drift repair: enqueues a forced DeltaSync ({"force":true} → every category
-/// refetched regardless of last_activities) per active account, staggered by enqueue order.
-/// Managed-list reconcile and the retrain check join this pass in M3/M2. Gate: Background:NightlyReconcile.
+/// 03:00 UTC drift repair: per active account, enqueues a forced DeltaSync ({"force":true} →
+/// every category refetched regardless of last_activities) AND a Train when the model has drifted
+/// (≥ RETRAIN_MIN_NEW_RATINGS new ratings since it last trained, or >14 days old — Train chains
+/// Evaluate → BuildFeed). Gate: Background:NightlyReconcile.
 /// </summary>
 public sealed class NightlyReconcileService(
     IServiceScopeFactory scopeFactory,
@@ -49,32 +51,63 @@ public sealed class NightlyReconcileService(
                     .Select(c => c.AccountId)
                     .ToListAsync(stoppingToken);
 
+                var retrainThreshold = configuration.GetValue("RETRAIN_MIN_NEW_RATINGS", 10);
                 var enqueued = 0;
+                var retrains = 0;
                 foreach (var accountId in accountIds)
                 {
-                    var inFlight = await db.SyncJobs.AnyAsync(
+                    var deltaInFlight = await db.SyncJobs.AnyAsync(
                         j => j.AccountId == accountId && j.Kind == JobKind.DeltaSync
                             && (j.Status == JobStatus.Pending || j.Status == JobStatus.Running),
                         stoppingToken);
-                    if (inFlight)
+                    if (!deltaInFlight)
                     {
-                        continue;
+                        db.SyncJobs.Add(new SyncJob
+                        {
+                            Id = Guid.NewGuid(),
+                            AccountId = accountId,
+                            Kind = JobKind.DeltaSync,
+                            Priority = 2,
+                            EnqueuedAt = now,
+                            CursorJson = """{"Force":true}""",
+                        });
+                        enqueued++;
                     }
 
-                    db.SyncJobs.Add(new SyncJob
+                    // Retrain when the model has drifted: ≥N ratings since it last trained, or it's
+                    // older than two weeks. Train chains Evaluate → BuildFeed, so the feed refreshes.
+                    var trainInFlight = await db.SyncJobs.AnyAsync(
+                        j => j.AccountId == accountId && (j.Kind == JobKind.Train || j.Kind == JobKind.Evaluate)
+                            && (j.Status == JobStatus.Pending || j.Status == JobStatus.Running),
+                        stoppingToken);
+                    if (!trainInFlight)
                     {
-                        Id = Guid.NewGuid(),
-                        AccountId = accountId,
-                        Kind = JobKind.DeltaSync,
-                        Priority = 2,
-                        EnqueuedAt = now,
-                        CursorJson = """{"Force":true}""",
-                    });
-                    enqueued++;
+                        var trainedAt = await db.ModelArtifacts
+                            .Where(a => a.AccountId == accountId && a.Status == ArtifactStatus.Active)
+                            .Select(a => (DateTime?)a.TrainedAt)
+                            .FirstOrDefaultAsync(stoppingToken);
+                        if (trainedAt is { } since)
+                        {
+                            var newRatings = await db.UserRatings
+                                .CountAsync(r => r.AccountId == accountId && r.RatedAt > since, stoppingToken);
+                            if (newRatings >= retrainThreshold || (now - since).TotalDays > 14)
+                            {
+                                db.SyncJobs.Add(new SyncJob
+                                {
+                                    Id = Guid.NewGuid(),
+                                    AccountId = accountId,
+                                    Kind = JobKind.Train,
+                                    Priority = 3,
+                                    EnqueuedAt = now,
+                                });
+                                retrains++;
+                            }
+                        }
+                    }
                 }
 
                 await db.SaveChangesAsync(stoppingToken);
-                logger.LogInformation("Nightly reconcile enqueued for {Count} account(s).", enqueued);
+                logger.LogInformation("Nightly reconcile: {Sync} delta sync(s), {Retrain} retrain(s).", enqueued, retrains);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
