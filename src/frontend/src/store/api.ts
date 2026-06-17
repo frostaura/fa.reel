@@ -1,6 +1,6 @@
 import { createApi, fetchBaseQuery, type BaseQueryFn, type FetchArgs, type FetchBaseQueryError } from "@reduxjs/toolkit/query/react";
 import type { ContinueEntry, FeedPayload } from "./feedTypes";
-import type { ProvidersPayload, SavedEntry, TitleDetailPayload } from "./titleTypes";
+import type { PersonPayload, ProvidersPayload, SavedEntry, TitleDetailPayload } from "./titleTypes";
 
 export interface TypeaheadTitle {
   titleId: string;
@@ -56,6 +56,7 @@ export interface TasteDnaPayload {
   topGenres: { genre: string; affinity: number; count: number }[];
   eras: { decade: number; affinity: number; count: number }[];
   creators: { name: string; department: string | null; profilePath: string | null; affinity: number; count: number }[];
+  topActors: { personId: string; name: string; profilePath: string | null; rating: number }[];
   histogram: { rating: number; count: number }[];
   drift: { year: number; shares: Record<string, number> }[];
 }
@@ -193,7 +194,7 @@ const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQue
 export const api = createApi({
   reducerPath: "reelApi",
   baseQuery: baseQueryWithReauth,
-  tagTypes: ["Session", "Sync", "Feed", "TasteDna", "Lab", "Title", "Saved", "Prefs"],
+  tagTypes: ["Session", "Sync", "Feed", "TasteDna", "Lab", "Title", "Saved", "Prefs", "Person"],
   endpoints: (b) => ({
     getSession: b.query<Session, void>({
       query: () => "auth/me",
@@ -241,6 +242,43 @@ export const api = createApi({
     getProviders: b.query<ProvidersPayload, { mediaType: string; tmdbId: number }>({
       query: ({ mediaType, tmdbId }) => `titles/${mediaType}/${tmdbId}/providers`,
       providesTags: (_r, _e, arg) => [{ type: "Title", id: `providers:${arg.mediaType}:${arg.tmdbId}` }],
+    }),
+    getPerson: b.query<PersonPayload, string>({
+      query: (personId) => `people/${personId}`,
+      providesTags: (_r, _e, personId) => [{ type: "Person", id: personId }],
+    }),
+    ratePerson: b.mutation<{ personId: string; rating: number }, { personId: string; rating: number }>({
+      query: ({ personId, rating }) => ({ url: `people/${personId}/rating`, method: "POST", body: { rating } }),
+      // Refresh the actor page, the DNA Top-Actors section, and the open title's cast badges.
+      invalidatesTags: (_r, _e, arg) => [{ type: "Person", id: arg.personId }, "TasteDna", "Title"],
+      async onQueryStarted({ personId, rating }, { dispatch, queryFulfilled }) {
+        const patch = dispatch(
+          api.util.updateQueryData("getPerson", personId, (draft) => {
+            draft.userRating = rating;
+          })
+        );
+        try {
+          await queryFulfilled;
+        } catch {
+          patch.undo();
+        }
+      },
+    }),
+    unratePerson: b.mutation<{ personId: string }, { personId: string }>({
+      query: ({ personId }) => ({ url: `people/${personId}/rating`, method: "DELETE" }),
+      invalidatesTags: (_r, _e, arg) => [{ type: "Person", id: arg.personId }, "TasteDna", "Title"],
+      async onQueryStarted({ personId }, { dispatch, queryFulfilled }) {
+        const patch = dispatch(
+          api.util.updateQueryData("getPerson", personId, (draft) => {
+            draft.userRating = null;
+          })
+        );
+        try {
+          await queryFulfilled;
+        } catch {
+          patch.undo();
+        }
+      },
     }),
     rateTitle: b.mutation<{ userRating: number }, { mediaType: string; tmdbId: number; rating: number; markWatched?: boolean }>({
       query: ({ mediaType, tmdbId, ...body }) => ({ url: `titles/${mediaType}/${tmdbId}/rating`, method: "POST", body }),
@@ -422,6 +460,9 @@ export const {
   useRebuildFeedMutation,
   useGetTitleQuery,
   useGetProvidersQuery,
+  useGetPersonQuery,
+  useRatePersonMutation,
+  useUnratePersonMutation,
   useRateTitleMutation,
   useMarkNotInterestedMutation,
   useUndoNotInterestedMutation,

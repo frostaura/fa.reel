@@ -101,6 +101,20 @@ public class FeatureVectorBuilder(IReelDbContext db)
             }
         }
 
+        // Explicit person ratings (time-filtered like every other label, so the M2 gate stays
+        // leakage-clean) OVERRIDE the derived signal for that person: inject the rating as k
+        // identical pseudo-observations (k = shrinkage constant), which dominates ShrunkenMean
+        // (≈ a 50/50 blend toward the explicit value) and rides the existing cast/director/
+        // writer-affinity features with no schema change. Replace, not append → no double-count.
+        var explicitPersonRatings = await db.UserPersonRatings
+            .Where(r => r.AccountId == accountId && r.RatedAt <= asOf)
+            .Select(r => new { r.PersonId, r.Rating })
+            .ToListAsync(ct);
+        foreach (var pr in explicitPersonRatings)
+        {
+            personRatings[pr.PersonId] = Enumerable.Repeat(pr.Rating, TasteMath.ShrinkageK).ToList();
+        }
+
         // Show engagement: episode/season ratings averaged per parent show.
         var showEngagement = (await db.UserRatings
                 .Where(r => r.AccountId == accountId && r.RatedAt <= asOf

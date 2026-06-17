@@ -46,6 +46,7 @@ public class ReelDbContext(DbContextOptions<ReelDbContext> options, IAccountCont
     public DbSet<WatchedTitle> WatchedTitles => Set<WatchedTitle>();
     public DbSet<ShowWatchProgress> ShowWatchProgresses => Set<ShowWatchProgress>();
     public DbSet<UserRating> UserRatings => Set<UserRating>();
+    public DbSet<UserPersonRating> UserPersonRatings => Set<UserPersonRating>();
     public DbSet<UserTitleReaction> UserTitleReactions => Set<UserTitleReaction>();
     public DbSet<ContentFilter> ContentFilters => Set<ContentFilter>();
 
@@ -173,6 +174,12 @@ public class ReelDbContext(DbContextOptions<ReelDbContext> options, IAccountCont
         modelBuilder.Entity<UserRating>(e =>
         {
             e.HasIndex(r => new { r.AccountId, r.SubjectType, r.TitleId, r.SeasonNumber, r.EpisodeNumber }).IsUnique();
+            e.HasIndex(r => new { r.AccountId, r.RatedAt });
+        });
+
+        modelBuilder.Entity<UserPersonRating>(e =>
+        {
+            e.HasIndex(r => new { r.AccountId, r.PersonId }).IsUnique();
             e.HasIndex(r => new { r.AccountId, r.RatedAt });
         });
 

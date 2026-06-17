@@ -6,6 +6,28 @@ export interface CastMember {
   character: string | null;
   castOrder: number | null;
   profilePath: string | null;
+  userRating: number | null;
+}
+
+/** Actor page payload (mirrors PersonEndpoints GET). */
+export interface PersonPayload {
+  id: string;
+  name: string;
+  department: string | null;
+  profilePath: string | null;
+  userRating: number | null;
+  derivedAffinity: number | null;
+  ratedTitleCount: number;
+  filmography: {
+    titleId: string;
+    mediaType: "Movie" | "Show";
+    tmdbId: number | null;
+    name: string;
+    year: number | null;
+    posterPath: string | null;
+    userRating: number | null;
+    predictedRating: number | null;
+  }[];
 }
 
 export interface TitleDetailPayload {

@@ -63,6 +63,22 @@ public static class TasteEndpoints
                 .Take(12)
                 .ToList();
 
+            // Top rated actors — the user's EXPLICIT person ratings (distinct from derived creators).
+            var topActors = await db.UserPersonRatings
+                .Where(r => r.AccountId == accountId)
+                .Join(db.Persons, r => r.PersonId, p => p.Id, (r, p) => new
+                {
+                    personId = p.Id,
+                    name = p.Name,
+                    profilePath = p.ProfilePath,
+                    rating = r.Rating,
+                    ratedAt = r.RatedAt,
+                })
+                .OrderByDescending(a => a.rating)
+                .ThenByDescending(a => a.ratedAt)
+                .Take(12)
+                .ToListAsync(ct);
+
             // Ratings histogram + headline stats.
             var ratings = await db.UserRatings
                 .Where(r => r.AccountId == accountId
@@ -128,6 +144,7 @@ public static class TasteEndpoints
                 topGenres,
                 eras,
                 creators,
+                topActors,
                 histogram,
                 drift,
             });

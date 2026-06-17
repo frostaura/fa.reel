@@ -57,10 +57,10 @@ public class TenancyModelTests
     }
 
     [Fact]
-    public void Model_builds_with_all_thirty_tables()
+    public void Model_builds_with_all_expected_tables()
     {
         using var db = CreateContext();
         var tableCount = db.Model.GetEntityTypes().Count(t => !t.IsOwned());
-        Assert.Equal(30, tableCount);
+        Assert.Equal(31, tableCount); // +UserPersonRating (2026-06-17)
     }
 }

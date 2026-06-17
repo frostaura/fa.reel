@@ -7,12 +7,16 @@ namespace FrostAura.Reel.Application.Ml;
 /// </summary>
 public static class TasteMath
 {
+    /// <summary>Empirical-Bayes shrinkage constant (k). Also the pseudo-observation weight an
+    /// explicit person rating gets so it dominates the derived affinity (≈ 50/50 blend).</summary>
+    public const int ShrinkageK = 3;
+
     /// <summary>
     /// Empirical-Bayes shrunken mean: pulls small samples toward the user's overall mean so
     /// one lucky 10 doesn't mint a 10.0 "affinity" for an actor seen once.
     /// (sum + k·prior) / (n + k), k = 3 by convention from the plan.
     /// </summary>
-    public static decimal ShrunkenMean(IReadOnlyCollection<short> ratings, decimal priorMean, decimal k = 3m)
+    public static decimal ShrunkenMean(IReadOnlyCollection<short> ratings, decimal priorMean, decimal k = ShrinkageK)
     {
         if (ratings.Count == 0)
         {

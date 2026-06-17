@@ -51,6 +51,10 @@ public static class TitleEndpoints
                     character = c.CharacterName,
                     castOrder = c.CastOrder,
                     profilePath = p.ProfilePath,
+                    userRating = db.UserPersonRatings
+                        .Where(pr => pr.AccountId == accountId && pr.PersonId == p.Id)
+                        .Select(pr => (short?)pr.Rating)
+                        .FirstOrDefault(),
                 })
                 .ToListAsync(ct);
 

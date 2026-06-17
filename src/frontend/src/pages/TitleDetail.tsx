@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { Bookmark, BookmarkCheck, Eye, EyeOff, Play, Undo2, X } from "lucide-react";
 import {
   useGetTitleQuery,
@@ -11,10 +11,11 @@ import {
   useUndoNotInterestedMutation,
   useUnsaveForLaterMutation,
 } from "../store/api";
-import { backdropUrl, profileUrl } from "../lib/tmdbImages";
+import { backdropUrl } from "../lib/tmdbImages";
 import PosterImage from "../components/rec/PosterImage";
 import PredictedRatingBadge from "../components/rec/PredictedRatingBadge";
 import WhereToWatch from "../components/title/WhereToWatch";
+import CastMemberCard from "../components/title/CastMemberCard";
 import { formatRuntime } from "../lib/format";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
 import {
@@ -23,6 +24,20 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../components/ui/dropdown-menu";
+
+/** Comma-separated crew names, each linking to the actor/person page. */
+function PersonLinks({ people }: { people: { personId: string; name: string }[] }) {
+  return (
+    <span className="text-fa-frost">
+      {people.map((p, i) => (
+        <span key={p.personId}>
+          {i > 0 && ", "}
+          <Link to={`/person/${p.personId}`} className="hover:text-fa-frost-bright">{p.name}</Link>
+        </span>
+      ))}
+    </span>
+  );
+}
 
 /** Humanize a model feature name for the breakdown bars. Covers every FeatureSchema scalar; any
  *  future/unmapped name falls back to a camelCase→words humanizer so no raw token ever shows. */
@@ -276,30 +291,18 @@ export default function TitleDetail() {
                 <section className="space-y-3">
                   {title.directors.length > 0 && (
                     <p className="fa-caption text-fa-frost-dim">
-                      Directed by <span className="text-fa-frost">{title.directors.map((d) => d.name).join(", ")}</span>
+                      Directed by <PersonLinks people={title.directors} />
                     </p>
                   )}
                   {title.writers.length > 0 && (
                     <p className="fa-caption text-fa-frost-dim">
-                      Written by <span className="text-fa-frost">{title.writers.map((w) => w.name).join(", ")}</span>
+                      Written by <PersonLinks people={title.writers} />
                     </p>
                   )}
                   {title.cast.length > 0 && (
                     <div className="flex gap-3 overflow-x-auto pb-2 [scrollbar-width:thin]">
                       {title.cast.map((member) => (
-                        <div key={member.personId} className="w-20 shrink-0 text-center space-y-1">
-                          <div className="h-20 w-20 rounded-full overflow-hidden bg-fa-ink-3 mx-auto">
-                            {profileUrl(member.profilePath) ? (
-                              <img src={profileUrl(member.profilePath)!} alt={member.name} loading="lazy" className="h-full w-full object-cover" />
-                            ) : (
-                              <div className="h-full w-full flex items-center justify-center fa-caption text-fa-frost-dim">
-                                {member.name.split(" ").map((w) => w[0]).slice(0, 2).join("")}
-                              </div>
-                            )}
-                          </div>
-                          <p className="fa-caption text-fa-frost truncate" title={member.name}>{member.name}</p>
-                          {member.character && <p className="fa-caption text-fa-frost-dim/70 truncate">{member.character}</p>}
-                        </div>
+                        <CastMemberCard key={member.personId} member={member} />
                       ))}
                     </div>
                   )}

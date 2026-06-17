@@ -35,6 +35,7 @@ public interface IReelDbContext
     DbSet<WatchedTitle> WatchedTitles { get; }
     DbSet<ShowWatchProgress> ShowWatchProgresses { get; }
     DbSet<UserRating> UserRatings { get; }
+    DbSet<UserPersonRating> UserPersonRatings { get; }
     DbSet<UserTitleReaction> UserTitleReactions { get; }
     DbSet<ContentFilter> ContentFilters { get; }
 

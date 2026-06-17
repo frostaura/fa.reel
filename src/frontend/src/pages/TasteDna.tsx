@@ -10,6 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { Link } from "react-router-dom";
 import { useGetTasteDnaQuery } from "../store/api";
 import { profileUrl } from "../lib/tmdbImages";
 
@@ -164,6 +165,33 @@ export default function TasteDna() {
             ))}
           </div>
         </section>
+
+        {/* Top rated actors — explicit person ratings */}
+        {data.topActors.length > 0 && (
+          <section className="fa-card p-5" data-testid="top-actors">
+            <h2 className="fa-section-title mb-3">Top rated actors</h2>
+            <div className="space-y-2.5">
+              {data.topActors.map((actor) => (
+                <Link key={actor.personId} to={`/person/${actor.personId}`} className="flex items-center gap-3 group">
+                  <div className="h-8 w-8 rounded-full overflow-hidden bg-fa-ink-3 shrink-0">
+                    {profileUrl(actor.profilePath) ? (
+                      <img src={profileUrl(actor.profilePath)!} alt="" loading="lazy" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="h-full w-full flex items-center justify-center fa-caption text-fa-frost-dim">
+                        {actor.name[0]}
+                      </div>
+                    )}
+                  </div>
+                  <span className="fa-body text-fa-frost group-hover:text-fa-frost-bright w-40 truncate">{actor.name}</span>
+                  <div className="flex-1 h-2 rounded-full bg-fa-glass overflow-hidden">
+                    <div className="h-full rounded-full bg-fa-frost/70" style={{ width: `${(actor.rating / 10) * 100}%` }} />
+                  </div>
+                  <span className="fa-caption text-fa-frost-bright tabular-nums w-8 text-right">{actor.rating}</span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Ratings histogram */}
         <section className="fa-card p-5">

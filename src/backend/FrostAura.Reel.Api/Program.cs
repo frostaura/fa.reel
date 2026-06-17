@@ -31,6 +31,7 @@ app.MapSyncEndpoints();
 app.MapFeedEndpoints();
 app.MapTitleEndpoints();
 app.MapReactionEndpoints();
+app.MapPersonEndpoints();
 app.MapSavedEndpoints();
 app.MapSearchEndpoints();
 app.MapTasteEndpoints();
