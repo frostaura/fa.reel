@@ -37,7 +37,7 @@ export default function SearchResults() {
   const query = params.get("q") ?? "";
   const location = useLocation();
   const [filter, setFilter] = useState(DEFAULT_BROWSE_FILTER);
-  const { status, phase, cards, reason } = useAskReel(query);
+  const { status, phase, assistant, cards, reason } = useAskReel(query);
 
   const visible = cards.filter((c) => matchesMedia(c.mediaType, filter));
   const streaming = status === "streaming";
@@ -56,6 +56,13 @@ export default function SearchResults() {
         </div>
         {cards.length > 0 && <BrowseFilters value={filter} onChange={setFilter} showAvailability={false} />}
       </div>
+
+      {assistant && (
+        <div data-testid="askreel-reply" className="flex items-start gap-3 fa-card p-4 reel-rise">
+          <Sparkles className="h-5 w-5 text-fa-frost shrink-0 mt-0.5" />
+          <p className="fa-body text-fa-frost-bright">{assistant}</p>
+        </div>
+      )}
 
       {streaming && (
         <div data-testid="askreel-banner" className="fa-card relative overflow-hidden p-4 flex items-center gap-4">

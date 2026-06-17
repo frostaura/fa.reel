@@ -6,6 +6,7 @@ type Status = "idle" | "streaming" | "done" | "error";
 interface State {
   status: Status;
   phase: PhaseData | null;
+  assistant: string | null;
   byId: Record<string, AskCard>;
   order: string[];
   reason: string | null;
@@ -14,20 +15,23 @@ interface State {
 type Action =
   | { type: "reset" }
   | { type: "phase"; data: PhaseData }
+  | { type: "assistant"; data: { text: string } }
   | { type: "candidate"; data: AskCard }
   | { type: "scored"; data: { titleId: string; predictedRating: number | null } }
   | { type: "reranked"; data: { titleId: string; fit: number | null; why: string | null } }
   | { type: "done"; data: { results: AskCard[]; reason: string | null } }
   | { type: "error" };
 
-const initial: State = { status: "idle", phase: null, byId: {}, order: [], reason: null };
+const initial: State = { status: "idle", phase: null, assistant: null, byId: {}, order: [], reason: null };
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
     case "reset":
-      return { status: "streaming", phase: null, byId: {}, order: [], reason: null };
+      return { status: "streaming", phase: null, assistant: null, byId: {}, order: [], reason: null };
     case "phase":
       return { ...state, status: "streaming", phase: action.data };
+    case "assistant":
+      return { ...state, assistant: action.data.text };
     case "candidate": {
       const c = action.data;
       if (state.byId[c.titleId]) return state;
@@ -83,6 +87,9 @@ export function useAskReel(query: string) {
         case "phase":
           dispatch({ type: "phase", data: ev.data });
           break;
+        case "assistant-message":
+          dispatch({ type: "assistant", data: ev.data });
+          break;
         case "candidate":
           dispatch({ type: "candidate", data: ev.data });
           break;
@@ -106,6 +113,18 @@ export function useAskReel(query: string) {
     return () => controller.abort();
   }, [query]);
 
-  const cards = state.order.map((id) => state.byId[id]).filter(Boolean);
-  return { status: state.status, phase: state.phase, cards, reason: state.reason };
+  // Sort client-side by the same blend the server uses — so tiles visibly re-order live as
+  // personal scores and hyper-personal LLM fit stream in (insertion order breaks ties; sort is stable).
+  const cards = state.order
+    .map((id) => state.byId[id])
+    .filter(Boolean)
+    .sort((a, b) => blend(b) - blend(a));
+  return { status: state.status, phase: state.phase, assistant: state.assistant, cards, reason: state.reason };
+}
+
+function blend(c: AskCard): number {
+  const sim = c.similarity ?? 0;
+  const predicted = (c.predictedRating ?? 6) / 10;
+  const fit = c.fit ?? 0.5;
+  return sim * 0.35 + predicted * 0.25 + fit * 0.4;
 }

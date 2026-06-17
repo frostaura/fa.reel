@@ -89,34 +89,7 @@ public class OpenRouterSearchInterpreter(
         try
         {
             using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-
-            string[] StrArray(string name) =>
-                root.TryGetProperty(name, out var el) && el.ValueKind == JsonValueKind.Array
-                    ? el.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.String)
-                        .Select(e => e.GetString()!.Trim().ToLowerInvariant()).Where(s => s.Length > 0).Distinct().Take(8).ToArray()
-                    : [];
-
-            // Keep only genre slugs we actually know how to map to TMDB ids.
-            var genres = StrArray("genres").Where(TmdbGenres.SlugToIds.ContainsKey).ToArray();
-            var keywords = StrArray("keywords");
-            var media = StrArray("mediaTypes")
-                .Select(m => m.StartsWith("movie") ? MediaType.Movie : m is "tv" or "show" or "series" ? MediaType.Show : (MediaType?)null)
-                .Where(m => m is not null).Select(m => m!.Value).Distinct().ToArray();
-            int? minYear = root.TryGetProperty("minYear", out var y) && y.ValueKind == JsonValueKind.Number && y.TryGetInt32(out var yr) && yr > 1870
-                ? yr : null;
-            var freeText = root.TryGetProperty("freeText", out var f) && f.ValueKind == JsonValueKind.String && f.GetString() is { Length: > 0 } s
-                ? s : fallbackText;
-
-            // A model that returns nothing usable still gets the heuristic's keywords so we never
-            // fire an empty discovery.
-            if (genres.Length == 0 && keywords.Length == 0)
-            {
-                var h = Heuristic(fallbackText);
-                return h with { MediaTypes = media.Length > 0 ? media : h.MediaTypes, MinYear = minYear ?? h.MinYear };
-            }
-
-            return new SearchIntent(genres, keywords, media, freeText, minYear);
+            return SearchIntentParser.FromJson(doc.RootElement, fallbackText, Heuristic(fallbackText));
         }
         catch (JsonException)
         {

@@ -78,13 +78,15 @@ public class LiveSearchExpansionTests(PostgresFixture fixture)
         var recorder = new ApiUsageRecorder(scopeFactory, NullLogger<ApiUsageRecorder>.Instance);
         var interpreter = new OpenRouterSearchInterpreter(
             new HttpClient(), recorder, config, NullLogger<OpenRouterSearchInterpreter>.Instance);
+        var searchAgent = new OpenRouterSearchAgent(
+            new HttpClient(), interpreter, recorder, config, NullLogger<OpenRouterSearchAgent>.Instance);
 
         var eligibility = new EligibilityQueryBuilder(db);
         var featureBuilder = new FeatureVectorBuilder(db);
         var service = new LiveSearchExpansionService(
             db,
             scoped,
-            interpreter,
+            searchAgent,
             tmdb,
             new StubEmbeddingProvider(),
             eligibility,

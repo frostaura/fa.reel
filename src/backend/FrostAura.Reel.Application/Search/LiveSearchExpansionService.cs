@@ -15,18 +15,18 @@ using Pgvector;
 namespace FrostAura.Reel.Application.Search;
 
 /// <summary>
-/// Live "Ask Reel": pull titles matching a natural-language query straight from TMDB on demand,
-/// score them for the user, and stream the result as it resolves — never bounded by what's
-/// already in the catalog (the founder has seen ~97% of it). The flow, emitted as SSE events:
-/// interpret → TMDB discover/search → upsert global Titles → filter to unseen + maturity → embed
-/// (from summary) → cosine pre-rank → hydrate + personally score the top slice. Catalog rows are
-/// global, so every search warms the catalog for all tenants; the per-query TMDB fetch is shared
-/// via the <see cref="ICatalogWorkCoordinator"/> so concurrent identical searches don't duplicate.
+/// Live "Ask Reel": pull titles matching a natural-language turn straight from TMDB on demand,
+/// score them for the user, then re-rank every one with the conversational agent — streamed as
+/// it resolves, never bounded by what's already in the catalogue. The flow, emitted as SSE events:
+/// assistant-message (the agent's reply) → phase → candidate → candidate-scored → candidate-reranked
+/// → done. Catalog rows are global, so every search warms the catalogue for all tenants; the
+/// per-query TMDB fetch is shared via <see cref="ICatalogWorkCoordinator"/>, and per-title LLM
+/// fit is cached so re-asks never re-spend.
 /// </summary>
 public sealed class LiveSearchExpansionService(
     IReelDbContext db,
     IAccountContext accountContext,
-    ISearchQueryInterpreter interpreter,
+    ISearchAgent agent,
     ITmdbClient tmdb,
     IEmbeddingProvider embeddings,
     EligibilityQueryBuilder eligibility,
@@ -42,22 +42,28 @@ public sealed class LiveSearchExpansionService(
     private const int MaxCandidates = 40;
     private const int ReturnCount = 24;
     private const int HydrateScoreSlice = 12;
+    private const int RerankBatch = 6;
     private const int SearchPages = 1;
     private static readonly TimeSpan DiscoveryTtl = TimeSpan.FromHours(6);
+    private static readonly TimeSpan FitTtl = TimeSpan.FromHours(6);
 
     /// <summary>An SSE event emitter — (eventName, payload). The endpoint writes it to the stream.</summary>
     public delegate Task Emit(string eventName, object payload);
 
+    /// <summary>Single-turn convenience overload (no conversation history / shown set).</summary>
+    public Task StreamAsync(string message, string? region, Emit emit, CancellationToken ct) =>
+        StreamAsync(message, [], [], region, emit, ct);
+
     /// <summary>
-    /// Runs the full live expansion for <paramref name="query"/>, emitting phase/candidate/
-    /// candidate-scored/done events. Never throws for an ordinary failure — it emits a graceful
-    /// done with a reason instead.
+    /// Runs a conversational turn end-to-end, emitting the SSE event stream. Never throws for an
+    /// ordinary failure — emits a graceful done with a reason instead.
     /// </summary>
-    public async Task StreamAsync(string query, string? region, Emit emit, CancellationToken ct)
+    public async Task StreamAsync(
+        string message, IReadOnlyList<ChatTurn> history, IReadOnlyList<long> shownTmdbIds, string? region, Emit emit, CancellationToken ct)
     {
         var accountId = accountContext.AccountId
             ?? throw new InvalidOperationException("Live search requires an account.");
-        var trimmed = (query ?? string.Empty).Trim();
+        var trimmed = (message ?? string.Empty).Trim();
         if (trimmed.Length == 0)
         {
             await emit("done", new { results = Array.Empty<object>(), reason = "empty query" });
@@ -76,30 +82,38 @@ public sealed class LiveSearchExpansionService(
                 return;
             }
 
-            // ── 1–3. Discover candidate titles (cached per query; TMDB fetch single-flighted) ──
-            var candidateIds = await DiscoverCandidateIdsAsync(trimmed, region, emit, ct);
+            var account = await db.Accounts.FirstAsync(a => a.Id == accountId, ct);
+            var now = DateTime.UtcNow;
+            var taste = await featureBuilder.BuildTasteStateAsync(accountId, now, ct);
+            var tasteSummary = await BuildTasteSummaryAsync(taste, ct);
+
+            // ── Interpret the turn → conversational reply + discovery intent ─────────────────
+            var shownNames = await ShownTitleNamesAsync(shownTmdbIds, ct);
+            var agentReply = await agent.InterpretAsync(history, trimmed, tasteSummary, shownNames, ct);
+            await emit("assistant-message", new { text = agentReply.Reply });
+
+            // ── Discover candidate titles (cached per intent; TMDB fetch single-flighted) ────
+            var candidateIds = await DiscoverCandidateIdsAsync(agentReply.Intent, region, ct);
             await emit("phase", new { stage = "discovered", found = candidateIds.Count, scored = 0 });
 
-            // ── 4. Filter to ELIGIBLE (unseen) + maturity ──────────────────────────────────
-            var account = await db.Accounts.FirstAsync(a => a.Id == accountId, ct);
-            var eligible = await eligibility.EligibleTitles(accountId)
-                .Where(t => candidateIds.Contains(t.Id))
-                .ToListAsync(ct);
-            eligible = eligible
+            // ── Filter to ELIGIBLE (unseen) + maturity + not-already-shown-this-conversation ─
+            var shownSet = shownTmdbIds.ToHashSet();
+            var eligible = (await eligibility.EligibleTitles(accountId)
+                    .Where(t => candidateIds.Contains(t.Id))
+                    .ToListAsync(ct))
                 .Where(t => EligibilityQueryBuilder.PassesMaturity(t, account.Settings.MaturityCeiling))
+                .Where(t => t.TmdbId == null || !shownSet.Contains(t.TmdbId.Value))
                 .ToList();
             if (eligible.Count == 0)
             {
-                await emit("done", new { results = Array.Empty<object>(), reason = "no unseen matches — try a broader phrase" });
+                await emit("done", new { results = Array.Empty<object>(), reason = "no fresh matches — try another angle" });
                 return;
             }
 
-            // ── 5. Embed the eligible candidates that lack a vector (from summary text) ──────
+            // ── Embed eligible candidates that lack a vector, then cosine pre-rank ───────────
             await emit("phase", new { stage = "embedding", found = eligible.Count, scored = 0 });
             await EnsureEmbeddedAsync(eligible, ct);
             var vectorsByTitle = await LoadVectorsAsync(eligible.Select(t => t.Id).ToList(), ct);
-
-            // ── 6. Cosine pre-rank against the query embedding ───────────────────────────────
             var queryVec = (await embeddings.EmbedAsync([trimmed], ct))[0];
             var ranked = eligible
                 .Where(t => vectorsByTitle.ContainsKey(t.Id))
@@ -108,51 +122,46 @@ public sealed class LiveSearchExpansionService(
                 .Take(ReturnCount)
                 .ToList();
 
-            // Stream the cards in relevance order — first paint.
             foreach (var (title, sim) in ranked)
             {
                 await emit("candidate", Card(title, sim, predicted: null));
             }
 
-            // ── 7. Hydrate + personally score the top slice ─────────────────────────────────
+            // ── Hydrate + personally score the top slice ─────────────────────────────────────
             await emit("phase", new { stage = "scoring", found = ranked.Count, scored = 0 });
             var sliceIds = ranked.Take(HydrateScoreSlice).Select(x => x.Title.Id).ToList();
             await HydrateAsync(sliceIds, ct);
-
-            var now = DateTime.UtcNow;
-            var taste = await featureBuilder.BuildTasteStateAsync(accountId, now, ct);
             var scores = await scorer.ScoreAsync(accountId, sliceIds, now, ct, taste);
-
-            var scoredCount = 0;
             foreach (var id in sliceIds)
             {
-                var predicted = scores.TryGetValue(id, out var p) ? (decimal?)p : null;
-                scoredCount++;
-                await emit("candidate-scored", new { titleId = id, predictedRating = predicted });
+                await emit("candidate-scored", new { titleId = id, predictedRating = scores.TryGetValue(id, out var p) ? (decimal?)p : null });
             }
 
-            await emit("phase", new { stage = "ranking", found = ranked.Count, scored = scoredCount });
+            // ── Live per-movie LLM re-rank (the hyper-personal layer) ────────────────────────
+            await emit("phase", new { stage = "ranking", found = ranked.Count, scored = sliceIds.Count });
+            var fitById = await RerankStreamAsync(accountId, trimmed, tasteSummary, ranked, scores, emit, ct);
 
-            // ── 8. Final blend: relevance × personal score ──────────────────────────────────
+            // ── Final blend: relevance × personal score × hyper-personal fit ─────────────────
             var final = ranked
-                .Select(x => new
+                .Select(x =>
                 {
-                    x.Title,
-                    x.Sim,
-                    Predicted = scores.TryGetValue(x.Title.Id, out var p) ? (decimal?)p : null,
+                    var predicted = scores.TryGetValue(x.Title.Id, out var p) ? (decimal?)p : null;
+                    var fit = fitById.TryGetValue(x.Title.Id, out var fr) ? fr : null;
+                    var blend = (x.Sim * 0.35) + ((double)(predicted ?? 6m) / 10d * 0.25) + ((fit?.Fit ?? 0.5d) * 0.40);
+                    return (x.Title, x.Sim, predicted, Fit: fit, Blend: blend);
                 })
-                .OrderByDescending(x => (x.Sim * 0.6) + ((double)(x.Predicted ?? 6m) / 10d * 0.4))
-                .Select(x => Card(x.Title, x.Sim, x.Predicted))
+                .OrderByDescending(x => x.Blend)
+                .Select(x => Card(x.Title, x.Sim, x.predicted, x.Fit?.Fit, x.Fit?.Why))
                 .ToList();
 
             await emit("done", new
             {
                 results = final,
-                reason = $"Pulled {candidateIds.Count} titles from the wider catalogue; {eligible.Count} unseen.",
+                reason = $"Pulled {candidateIds.Count} from the wider catalogue; {eligible.Count} unseen, ranked for you.",
             });
             logger.LogInformation(
-                "Ask Reel '{Query}': {Discovered} discovered, {Eligible} eligible, {Scored} scored.",
-                trimmed, candidateIds.Count, eligible.Count, scoredCount);
+                "Ask Reel '{Query}': {Discovered} discovered, {Eligible} eligible, {Scored} scored, {Reranked} reranked.",
+                trimmed, candidateIds.Count, eligible.Count, sliceIds.Count, fitById.Count);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -161,45 +170,84 @@ public sealed class LiveSearchExpansionService(
         }
     }
 
-    /// <summary>Discovers candidate Title ids for the query (cached 6h; the TMDB fetch is single-flighted).</summary>
-    private async Task<List<Guid>> DiscoverCandidateIdsAsync(string query, string? region, Emit emit, CancellationToken ct)
+    /// <summary>Re-ranks every shown card with the agent (batched, cached per (account,title,query)); streams candidate-reranked.</summary>
+    private async Task<Dictionary<Guid, RerankResult>> RerankStreamAsync(
+        Guid accountId, string query, string tasteSummary,
+        IReadOnlyList<(Title Title, double Sim)> ranked,
+        IReadOnlyDictionary<Guid, decimal> scores, Emit emit, CancellationToken ct)
     {
-        var normalized = NormalizeQuery(query);
-        if (cache.TryGetValue<List<Guid>>(CacheKey(normalized), out var cached) && cached is { Count: > 0 })
+        var qnorm = NormalizeQuery(query);
+        var fitById = new Dictionary<Guid, RerankResult>();
+
+        for (var i = 0; i < ranked.Count; i += RerankBatch)
         {
-            // Repeat search: titles already upserted last time — reuse, skip TMDB + the LLM.
+            var batch = ranked.Skip(i).Take(RerankBatch).ToList();
+            var uncached = new List<RerankInput>();
+            foreach (var (title, _) in batch)
+            {
+                if (cache.TryGetValue<RerankResult>(FitKey(accountId, title.Id, qnorm), out var cached) && cached is not null)
+                {
+                    fitById[title.Id] = cached;
+                }
+                else
+                {
+                    uncached.Add(new RerankInput(
+                        title.Id, title.Name, title.Year, title.MediaType.ToString(), title.Genres, title.Overview,
+                        scores.TryGetValue(title.Id, out var p) ? p : null));
+                }
+            }
+
+            if (uncached.Count > 0)
+            {
+                var results = await agent.RerankBatchAsync(uncached, query, tasteSummary, ct);
+                foreach (var res in results)
+                {
+                    fitById[res.TitleId] = res;
+                    cache.Set(FitKey(accountId, res.TitleId, qnorm), res, FitTtl);
+                }
+            }
+
+            foreach (var (title, _) in batch)
+            {
+                if (fitById.TryGetValue(title.Id, out var fit))
+                {
+                    await emit("candidate-reranked", new { titleId = title.Id, fit = fit.Fit, why = fit.Why });
+                }
+            }
+        }
+
+        return fitById;
+    }
+
+    private async Task<List<Guid>> DiscoverCandidateIdsAsync(SearchIntent intent, string? region, CancellationToken ct)
+    {
+        var key = IntentKey(intent);
+        if (cache.TryGetValue<List<Guid>>(CacheKey(key), out var cached) && cached is { Count: > 0 })
+        {
             return cached;
         }
 
-        // The whole TMDB firehose for this query runs once even under concurrent identical
-        // searches; the loser awaits the winner's items rather than re-hitting TMDB. The shared
-        // fetch uses CancellationToken.None — it must NOT be killed when one waiter disconnects
-        // (e.g. a dev StrictMode remount aborting the first request would otherwise starve the
-        // second sharing the same key). It's bounded by HTTP timeouts and warms the cache anyway.
+        // The TMDB firehose for this intent runs once even under concurrent identical searches;
+        // CancellationToken.None so a disconnecting waiter can't starve a sharer (dev StrictMode
+        // remount), and it warms the cache regardless.
         var items = await coordinator.RunOnceAsync(
-            $"askreel:fetch:{normalized}",
-            () => FetchFromTmdbAsync(query, region, CancellationToken.None));
-
+            $"askreel:fetch:{key}",
+            () => FetchFromTmdbAsync(intent, region, CancellationToken.None));
         if (items.Count == 0)
         {
             return [];
         }
 
         var ids = await UpsertAndCollectIdsAsync(items, ct);
-
-        cache.Set(CacheKey(normalized), ids, DiscoveryTtl);
+        cache.Set(CacheKey(key), ids, DiscoveryTtl);
         return ids;
     }
 
-    private async Task<IReadOnlyList<TmdbListItem>> FetchFromTmdbAsync(string query, string? region, CancellationToken ct)
+    private async Task<IReadOnlyList<TmdbListItem>> FetchFromTmdbAsync(SearchIntent intent, string? region, CancellationToken ct)
     {
-        var intent = await interpreter.InterpretAsync(query, ct);
-
-        var movieGenreIds = intent.Genres
-            .Where(g => TmdbGenres.SlugToIds.ContainsKey(g))
+        var movieGenreIds = intent.Genres.Where(TmdbGenres.SlugToIds.ContainsKey)
             .Select(g => TmdbGenres.SlugToIds[g].Movie).OfType<int>().ToList();
-        var tvGenreIds = intent.Genres
-            .Where(g => TmdbGenres.SlugToIds.ContainsKey(g))
+        var tvGenreIds = intent.Genres.Where(TmdbGenres.SlugToIds.ContainsKey)
             .Select(g => TmdbGenres.SlugToIds[g].Tv).OfType<int>().ToList();
 
         var keywordIds = new List<int>();
@@ -252,7 +300,6 @@ public sealed class LiveSearchExpansionService(
             .ToListAsync(ct);
     }
 
-    /// <summary>Embeds eligible candidates missing a vector, from the shared EmbeddingText (hash parity).</summary>
     private async Task EnsureEmbeddedAsync(IReadOnlyList<Title> eligible, CancellationToken ct)
     {
         var ids = eligible.Select(t => t.Id).ToList();
@@ -284,7 +331,6 @@ public sealed class LiveSearchExpansionService(
         catch (DbUpdateException)
         {
             // A concurrent search embedded some of these first (TitleEmbedding PK = TitleId).
-            // The vectors exist now — drop our duplicate adds and carry on.
             if (db is DbContext ctx)
             {
                 foreach (var entry in ctx.ChangeTracker.Entries<TitleEmbedding>()
@@ -313,8 +359,6 @@ public sealed class LiveSearchExpansionService(
         }
         catch (DbUpdateException ex)
         {
-            // A concurrent hydration of the same global title wrote overlapping credits; the data
-            // is present either way. Log and proceed — scoring tolerates whatever landed.
             logger.LogWarning(ex, "Concurrent hydration conflict on {Count} live-search titles; continuing.", needs.Count);
         }
     }
@@ -323,6 +367,49 @@ public sealed class LiveSearchExpansionService(
     {
         var rows = await db.TitleEmbeddings.Where(e => ids.Contains(e.TitleId)).ToListAsync(ct);
         return rows.ToDictionary(e => e.TitleId, e => e.Embedding.ToArray());
+    }
+
+    /// <summary>A compact taste line for the agent prompts — top genres + a few loved titles.</summary>
+    private async Task<string> BuildTasteSummaryAsync(FeatureVectorBuilder.TasteState taste, CancellationToken ct)
+    {
+        var topGenres = taste.GenreRatings
+            .Select(kv => new { kv.Key, Score = kv.Value.Count })
+            .OrderByDescending(g => g.Score)
+            .Take(4)
+            .Select(g => g.Key)
+            .ToList();
+        var loved = await db.Titles
+            .Where(t => taste.TopLovedTitleIds.Contains(t.Id))
+            .Select(t => t.Name)
+            .Take(4)
+            .ToListAsync(ct);
+
+        var parts = new List<string>();
+        if (topGenres.Count > 0)
+        {
+            parts.Add("favours " + string.Join(", ", topGenres));
+        }
+
+        if (loved.Count > 0)
+        {
+            parts.Add("loves " + string.Join(", ", loved));
+        }
+
+        return parts.Count > 0 ? string.Join("; ", parts) : "no strong signal yet";
+    }
+
+    private async Task<IReadOnlyList<string>> ShownTitleNamesAsync(IReadOnlyList<long> shownTmdbIds, CancellationToken ct)
+    {
+        if (shownTmdbIds.Count == 0)
+        {
+            return [];
+        }
+
+        return await db.Titles
+            .Where(t => t.TmdbId != null && shownTmdbIds.Contains(t.TmdbId.Value))
+            .Select(t => t.Name)
+            .Take(20)
+            .ToListAsync(ct);
     }
 
     private async Task StreamLexicalFallbackAsync(Guid accountId, string query, Emit emit, CancellationToken ct)
@@ -339,7 +426,7 @@ public sealed class LiveSearchExpansionService(
         await emit("done", new { results = cards, reason = cards.Count == 0 ? "no matches" : "matched on concepts & keywords" });
     }
 
-    private static object Card(Title t, double? similarity, decimal? predicted) => new
+    private static object Card(Title t, double? similarity, decimal? predicted, double? fit = null, string? why = null) => new
     {
         titleId = t.Id,
         mediaType = t.MediaType.ToString(),
@@ -350,6 +437,8 @@ public sealed class LiveSearchExpansionService(
         genres = t.Genres,
         similarity,
         predictedRating = predicted,
+        fit,
+        why,
     };
 
     private static double Cosine(float[] a, float[] b)
@@ -373,5 +462,11 @@ public sealed class LiveSearchExpansionService(
     private static string NormalizeQuery(string query) =>
         string.Join(' ', query.ToLowerInvariant().Split([' ', '\t', '\n'], StringSplitOptions.RemoveEmptyEntries));
 
-    private static string CacheKey(string normalized) => $"askreel:ids:{normalized}";
+    private static string IntentKey(SearchIntent intent) =>
+        $"{string.Join(',', intent.Genres.OrderBy(g => g))}|{string.Join(',', intent.Keywords.OrderBy(k => k))}|" +
+        $"{string.Join(',', intent.MediaTypes.Select(m => m.ToString()).OrderBy(m => m))}|{intent.MinYear}|{NormalizeQuery(intent.FreeText)}";
+
+    private static string CacheKey(string intentKey) => $"askreel:ids:{intentKey}";
+
+    private static string FitKey(Guid accountId, Guid titleId, string qnorm) => $"rerank:{accountId}:{titleId}:{qnorm}";
 }

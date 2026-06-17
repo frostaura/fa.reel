@@ -186,9 +186,15 @@ public static class SearchEndpoints
                 await http.Response.Body.FlushAsync(ct);
             };
 
+            var history = (request.History ?? [])
+                .Where(t => !string.IsNullOrWhiteSpace(t.Text))
+                .Select(t => new Domain.Ports.ChatTurn(t.Role ?? "user", t.Text!))
+                .ToList();
+            var shown = request.ShownTmdbIds ?? [];
+
             try
             {
-                await expansion.StreamAsync(request.Query ?? string.Empty, region, emit, ct);
+                await expansion.StreamAsync(request.Query ?? string.Empty, history, shown, region, emit, ct);
             }
             catch (OperationCanceledException)
             {
@@ -201,7 +207,9 @@ public static class SearchEndpoints
 
     public record SemanticRequest(string Query);
 
-    public record AskRequest(string Query);
+    public record AskTurn(string? Role, string? Text);
+
+    public record AskRequest(string Query, List<AskTurn>? History, List<long>? ShownTmdbIds);
 
     /// <summary>The account's MinPredictedRating floor (0 = off) — recommendation surfaces only.</summary>
     public static async Task<decimal> MinPredictedFloorAsync(IReelDbContext db, Guid accountId, CancellationToken ct)
