@@ -39,7 +39,21 @@ public static class SyncEndpoints
                 completedAt = job.CompletedAt,
             };
 
-            var active = jobs.FirstOrDefault(j => j.Status == JobStatus.Running) ?? jobs.FirstOrDefault(j => j.Status == JobStatus.Pending);
+            // The pill should surface the job the user cares about. A primary pipeline job
+            // (onboarding/enrichment/training) outranks a background Trakt poll (delta/reconcile)
+            // that fires every few minutes — otherwise a transient DeltaSync, enqueued after a
+            // long EnrichCatalog, would hijack the pill and read as a generic "Syncing".
+            static bool IsBackground(JobKind k) =>
+                k is JobKind.DeltaSync or JobKind.FullReconcile or JobKind.RefreshAvailability;
+
+            var active = jobs.Where(j => j.Status == JobStatus.Running)
+                    .OrderBy(j => IsBackground(j.Kind) ? 1 : 0)
+                    .ThenByDescending(j => j.EnqueuedAt)
+                    .FirstOrDefault()
+                ?? jobs.Where(j => j.Status == JobStatus.Pending)
+                    .OrderBy(j => IsBackground(j.Kind) ? 1 : 0)
+                    .ThenByDescending(j => j.EnqueuedAt)
+                    .FirstOrDefault();
 
             return Results.Ok(new
             {

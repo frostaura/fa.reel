@@ -18,7 +18,14 @@ public class OpenAiEmbeddingProvider(HttpClient httpClient, ApiUsageRecorder usa
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
 
-    private string? ApiKey => configuration["OPENAI_API_KEY"] is { Length: > 0 } key ? key : null;
+    // Key resolution, in priority order: an explicit embeddings key, a dedicated OpenAI key, or
+    // the OpenRouter key. OpenRouter serves openai/text-embedding-3-small at the SAME 1536 dims
+    // the schema expects, so the one OpenRouter key drives both attribute extraction and
+    // embeddings — no separate OpenAI account needed (verified 2026-06-17).
+    private string? ApiKey =>
+        Resolve("EMBEDDINGS_API_KEY") ?? Resolve("OPENAI_API_KEY") ?? Resolve("OPENROUTER_API_KEY");
+
+    private string? Resolve(string name) => configuration[name] is { Length: > 0 } key ? key : null;
 
     public bool IsAvailable => ApiKey is not null;
 

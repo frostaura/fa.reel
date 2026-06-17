@@ -47,6 +47,21 @@ const EXPLAINERS: Record<string, SyncExplainer> = {
       "Every prediction stays explainable",
     ],
   },
+  enrich: {
+    title: "Reading every title",
+    lines: [
+      "An AI analyst rates tone, pacing, humour and themes",
+      "Plot embeddings place each title in your taste space",
+      "Done once, then shared across all of Reel",
+    ],
+  },
+  evaluate: {
+    title: "Checking the model",
+    lines: [
+      "Scoring this model against a popularity baseline",
+      "Only a model that beats it ships to your feed",
+    ],
+  },
   feed: {
     title: "Building tonight's picks",
     lines: [
@@ -74,10 +89,22 @@ const JOB_KIND_TO_SSE: Record<string, string> = {
   DeltaSync: "delta",
   FullReconcile: "reconcile",
   HydrateCatalog: "hydrate",
+  EnrichCatalog: "enrich",
   Train: "train",
+  Evaluate: "evaluate",
   BuildFeed: "feed",
 };
 
 export function jobKindToSseKind(jobKind: string | null | undefined): string | null {
   return (jobKind && JOB_KIND_TO_SSE[jobKind]) || null;
+}
+
+/**
+ * Background Trakt polls (delta/reconcile) fire every few minutes and must not hijack the pill
+ * from a primary pipeline job (onboarding, enrichment, training) that the user is waiting on.
+ */
+const BACKGROUND_KINDS = new Set(["delta", "reconcile"]);
+
+export function isBackgroundKind(sseKind: string | null | undefined): boolean {
+  return sseKind != null && BACKGROUND_KINDS.has(sseKind);
 }

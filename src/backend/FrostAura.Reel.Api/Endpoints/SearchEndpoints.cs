@@ -88,10 +88,16 @@ public static class SearchEndpoints
                 var vectors = await embeddings.EmbedAsync([request.Query.Trim()], ct);
                 var queryVector = new Vector(vectors[0]);
 
+                // Restrict the kNN to ELIGIBLE titles BEFORE ordering by cosine. The catalog is
+                // dominated by the user's seen library, so a "top-N then filter to unseen" query
+                // returns almost nothing — the unseen titles rarely crack the global top-N.
+                var eligibleIds = eligibility.EligibleTitles(accountId).Select(t => t.Id);
+
                 var hits = await db.TitleEmbeddings
+                    .Where(e => eligibleIds.Contains(e.TitleId))
                     .OrderBy(e => e.Embedding.CosineDistance(queryVector))
-                    .Take(60)
-                    .Join(eligibility.EligibleTitles(accountId), e => e.TitleId, t => t.Id, (e, t) => new
+                    .Take(24)
+                    .Join(db.Titles, e => e.TitleId, t => t.Id, (e, t) => new
                     {
                         titleId = t.Id,
                         mediaType = t.MediaType.ToString(),
@@ -107,7 +113,6 @@ public static class SearchEndpoints
                             .Select(s => (decimal?)s.PredictedRating)
                             .FirstOrDefault(),
                     })
-                    .Take(24)
                     .ToListAsync(ct);
 
                 var ranked = hits

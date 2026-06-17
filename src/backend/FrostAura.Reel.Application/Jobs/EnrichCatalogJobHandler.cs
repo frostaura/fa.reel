@@ -48,15 +48,16 @@ public class EnrichCatalogJobHandler(
             ? new Cursor(Phase.Embeddings, null)
             : JsonSerializer.Deserialize<Cursor>(job.CursorJson) ?? new Cursor(Phase.Embeddings, null);
 
-        // The library: every hydrated title the account has watched or rated. These are both the
-        // training label rows and the seed for shared-catalog coverage.
-        var referenced = db.WatchedTitles.Where(w => w.AccountId == accountId).Select(w => w.TitleId)
-            .Union(db.UserRatings.Where(r => r.AccountId == accountId).Select(r => r.TitleId));
-        var libraryQuery = db.Titles.Where(t => referenced.Contains(t.Id) && t.LastMetadataRefreshAt != null);
+        // Every hydrated title — both the watched/rated LIBRARY (training label rows + loved
+        // centroids) AND the unwatched CANDIDATES that discovery surfaces. Serving needs the
+        // candidates embedded/attributed too: semantic search and feed similarity only ever
+        // operate on unseen titles, so scoping to the library alone leaves search with nothing.
+        // Catalog rows are global, so this work is shared across every tenant and runs once.
+        var hydratedQuery = db.Titles.Where(t => t.LastMetadataRefreshAt != null);
 
         if (embeddings.IsAvailable && cursor.Phase == Phase.Embeddings)
         {
-            cursor = await EmbedAsync(job, accountId, libraryQuery, cursor, ct);
+            cursor = await EmbedAsync(job, accountId, hydratedQuery, cursor, ct);
         }
 
         // Phase gate: advance even if embeddings were unavailable, so attributes still run.
@@ -64,7 +65,7 @@ public class EnrichCatalogJobHandler(
 
         if (extractor.IsAvailable)
         {
-            await ExtractAsync(job, accountId, libraryQuery, cursor, ct);
+            await ExtractAsync(job, accountId, hydratedQuery, cursor, ct);
         }
 
         if (!embeddings.IsAvailable && !extractor.IsAvailable)
@@ -81,9 +82,9 @@ public class EnrichCatalogJobHandler(
     }
 
     private async Task<Cursor> EmbedAsync(
-        SyncJob job, Guid accountId, IQueryable<Title> libraryQuery, Cursor cursor, CancellationToken ct)
+        SyncJob job, Guid accountId, IQueryable<Title> scopeQuery, Cursor cursor, CancellationToken ct)
     {
-        var pendingQuery = libraryQuery
+        var pendingQuery = scopeQuery
             .Where(t => !db.TitleEmbeddings.Any(e => e.TitleId == t.Id))
             .OrderBy(t => t.Id);
         var total = await pendingQuery.CountAsync(ct);
@@ -120,14 +121,16 @@ public class EnrichCatalogJobHandler(
             cursor = cursor with { LastTitleId = batch[^1].Id };
             job.CursorJson = JsonSerializer.Serialize(cursor);
             job.ProgressPct = total == 0 ? 0 : Math.Round(50m * processed / total, 1);
-            job.ProgressMessage = $"embedded {processed}/{total} titles";
+            // Same text on the poll (ProgressMessage) and the live SSE event so the pill never
+            // flickers between two phrasings.
+            job.ProgressMessage = $"Learning plots · {processed}/{total}";
             await db.SaveChangesAsync(ct);
 
             events.Publish(accountId, PipelineEventTypes.JobProgress, new Dictionary<string, object?>
             {
                 ["kind"] = "enrich",
                 ["pct"] = job.ProgressPct,
-                ["message"] = $"Learning plots · {processed}/{total}",
+                ["message"] = job.ProgressMessage,
             });
         }
 
@@ -135,14 +138,14 @@ public class EnrichCatalogJobHandler(
     }
 
     private async Task ExtractAsync(
-        SyncJob job, Guid accountId, IQueryable<Title> libraryQuery, Cursor cursor, CancellationToken ct)
+        SyncJob job, Guid accountId, IQueryable<Title> scopeQuery, Cursor cursor, CancellationToken ct)
     {
         // Eligible = not already settled BY THE CURRENT MODEL. A row is settled when it is Done
         // or has exhausted its retries under the same ExtractorModel. Model-scoping is what lets
         // a switch from the deterministic stub to the real model re-extract every title instead
         // of leaving stub data frozen in place.
         var modelId = extractor.ModelId;
-        var pendingQuery = libraryQuery
+        var pendingQuery = scopeQuery
             .Where(t => !db.TitleAttributes.Any(a =>
                 a.TitleId == t.Id
                 && a.ExtractorModel == modelId
@@ -213,14 +216,14 @@ public class EnrichCatalogJobHandler(
             cursor = cursor with { LastTitleId = batch[^1].Id };
             job.CursorJson = JsonSerializer.Serialize(cursor);
             job.ProgressPct = total == 0 ? 100 : Math.Round(50m + (50m * processed / total), 1);
-            job.ProgressMessage = $"analyzed {processed}/{total} titles";
+            job.ProgressMessage = $"Reading the mood · {processed}/{total}";
             await db.SaveChangesAsync(ct);
 
             events.Publish(accountId, PipelineEventTypes.JobProgress, new Dictionary<string, object?>
             {
                 ["kind"] = "enrich",
                 ["pct"] = job.ProgressPct,
-                ["message"] = $"Reading the mood · {processed}/{total}",
+                ["message"] = job.ProgressMessage,
             });
         }
     }

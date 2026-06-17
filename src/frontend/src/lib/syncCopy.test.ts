@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { jobKindToSseKind, syncExplainer } from "./syncCopy";
+import { jobKindToSseKind, syncExplainer, isBackgroundKind } from "./syncCopy";
 
 describe("syncExplainer", () => {
   it("maps known job kinds to their explainers", () => {
@@ -26,7 +26,9 @@ describe("syncExplainer", () => {
     expect(jobKindToSseKind("HydrateCatalog")).toBe("hydrate");
     expect(jobKindToSseKind("FullIngest")).toBe("ingest");
     expect(jobKindToSseKind("DeltaSync")).toBe("delta");
+    expect(jobKindToSseKind("EnrichCatalog")).toBe("enrich");
     expect(jobKindToSseKind("Train")).toBe("train");
+    expect(jobKindToSseKind("Evaluate")).toBe("evaluate");
     expect(jobKindToSseKind("SomethingNew")).toBeNull();
     expect(jobKindToSseKind(null)).toBeNull();
   });
@@ -34,5 +36,15 @@ describe("syncExplainer", () => {
   it("seeded kinds round-trip into real explainers", () => {
     expect(syncExplainer(jobKindToSseKind("HydrateCatalog")).title).toBe("Enriching your library");
     expect(syncExplainer(jobKindToSseKind("FullIngest")).title).toBe("First sync with Trakt");
+    expect(syncExplainer(jobKindToSseKind("EnrichCatalog")).title).toBe("Reading every title");
+  });
+
+  it("classifies background polls so they cannot hijack the pill from a primary job", () => {
+    expect(isBackgroundKind("delta")).toBe(true);
+    expect(isBackgroundKind("reconcile")).toBe(true);
+    expect(isBackgroundKind("enrich")).toBe(false);
+    expect(isBackgroundKind("ingest")).toBe(false);
+    expect(isBackgroundKind("train")).toBe(false);
+    expect(isBackgroundKind(null)).toBe(false);
   });
 });
