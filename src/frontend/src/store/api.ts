@@ -113,6 +113,7 @@ export interface SyncStatus {
 export interface AccountSettings {
   region: string;
   onboarded: boolean;
+  email?: string | null;
 }
 
 export interface ModelEvalDetail {
