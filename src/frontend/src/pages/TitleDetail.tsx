@@ -4,6 +4,8 @@ import { Bookmark, BookmarkCheck, Eye, EyeOff, Play, Undo2, X } from "lucide-rea
 import {
   useGetTitleQuery,
   useMarkNotInterestedMutation,
+  useMarkDroppedMutation,
+  useUndropMutation,
   useRateTitleMutation,
   useSaveForLaterMutation,
   useUndoNotInterestedMutation,
@@ -79,6 +81,8 @@ export default function TitleDetail() {
   const [rate] = useRateTitleMutation();
   const [notInterested] = useMarkNotInterestedMutation();
   const [undoNotInterested] = useUndoNotInterestedMutation();
+  const [markDropped] = useMarkDroppedMutation();
+  const [undrop] = useUndropMutation();
   const [save] = useSaveForLaterMutation();
   const [unsave] = useUnsaveForLaterMutation();
   const [trailerOpen, setTrailerOpen] = useState(false);
@@ -220,6 +224,19 @@ export default function TitleDetail() {
                       <DropdownMenuItem onClick={() => notInterested({ ...args, reason: "tone" })}>Wrong tone</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
+                )}
+
+                {/* Drop — shows only; hides from Continue Watching (manual, revocable) */}
+                {title.mediaType === "Show" && (
+                  title.userState.dropped ? (
+                    <button onClick={() => undrop(args)} className="fa-button border-fa-frost/40 text-fa-frost" data-testid="undrop">
+                      <Undo2 className="h-4 w-4" /> Dropped — undo
+                    </button>
+                  ) : (
+                    <button onClick={() => markDropped(args)} className="fa-button-ghost" data-testid="drop-show">
+                      <X className="h-4 w-4" /> Drop show
+                    </button>
+                  )
                 )}
               </div>
 

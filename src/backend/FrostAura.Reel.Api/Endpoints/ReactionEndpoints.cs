@@ -161,6 +161,38 @@ public static class ReactionEndpoints
             return Results.Ok(new { notInterested = true });
         });
 
+        // ── Drop an in-progress show (manual) — hides it from Continue Watching only ─────
+        group.MapPost("/reactions/dropped", async (
+            string mediaType, long tmdbId,
+            IReelDbContext db, IAccountContext accountContext, CancellationToken ct) =>
+        {
+            var accountId = accountContext.AccountId!.Value;
+            var title = await TitleEndpoints.ResolveTitleAsync(db, mediaType, tmdbId, ct);
+            if (title is null)
+            {
+                return Results.NotFound();
+            }
+
+            var existing = await db.UserTitleReactions.FirstOrDefaultAsync(
+                r => r.AccountId == accountId && r.TitleId == title.Id
+                    && r.Kind == ReactionKind.Dropped && r.RevokedAt == null, ct);
+            if (existing is null)
+            {
+                // Exclude-only: no rating, no managed-list, no Trakt outbox (Trakt has no dropped).
+                db.UserTitleReactions.Add(new UserTitleReaction
+                {
+                    Id = Guid.NewGuid(),
+                    AccountId = accountId,
+                    TitleId = title.Id,
+                    Kind = ReactionKind.Dropped,
+                    CreatedAt = DateTime.UtcNow,
+                });
+                await db.SaveChangesAsync(ct);
+            }
+
+            return Results.Ok(new { dropped = true });
+        });
+
         group.MapPost("/reactions/save_for_later", async (
             string mediaType, long tmdbId,
             IReelDbContext db, IAccountContext accountContext, CancellationToken ct) =>
@@ -223,6 +255,7 @@ public static class ReactionEndpoints
             {
                 "not_interested" => ReactionKind.NotInterested,
                 "save_for_later" => ReactionKind.SaveForLater,
+                "dropped" => ReactionKind.Dropped,
                 _ => (ReactionKind?)null,
             };
             if (reactionKind is null)

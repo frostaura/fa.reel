@@ -1,11 +1,14 @@
 import { Link, useLocation } from "react-router-dom";
+import { X } from "lucide-react";
 import type { ContinueEntry } from "../../store/feedTypes";
 import PosterImage from "../rec/PosterImage";
 import { formatEpisodeRef } from "../../lib/format";
+import { useMarkDroppedMutation } from "../../store/api";
 
 /** In-progress shows with the next episode front and centre, in resume-likelihood order. */
 export default function ContinueWatchingRow({ entries }: { entries: ContinueEntry[] }) {
   const location = useLocation();
+  const [markDropped] = useMarkDroppedMutation();
 
   if (entries.length === 0) {
     return null;
@@ -31,6 +34,21 @@ export default function ContinueWatchingRow({ entries }: { entries: ContinueEntr
                 <div className="absolute inset-x-0 bottom-0 h-1 bg-fa-ink/70">
                   <div className="h-full bg-fa-frost" style={{ width: `${pct}%` }} />
                 </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (entry.tmdbId != null) {
+                      markDropped({ mediaType: entry.mediaType.toLowerCase(), tmdbId: entry.tmdbId });
+                    }
+                  }}
+                  aria-label={`Drop ${entry.name}`}
+                  title="Drop — remove from Continue Watching"
+                  className="absolute right-1.5 top-1.5 rounded-full bg-fa-ink/70 p-1 text-fa-frost-dim opacity-0 transition hover:text-fa-danger group-hover:opacity-100 focus:opacity-100"
+                  data-testid="drop-button"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
               </div>
               <div className="mt-2 space-y-0.5">
                 <p className="fa-body font-medium text-fa-frost-bright truncate" title={entry.name}>

@@ -2,6 +2,7 @@ using FrostAura.Reel.Application.Persistence;
 using FrostAura.Reel.Application.Tenancy;
 using FrostAura.Reel.Domain.Catalog;
 using FrostAura.Reel.Domain.Feed;
+using FrostAura.Reel.Domain.Library;
 using FrostAura.Reel.Domain.Sync;
 using FrostAura.Reel.Domain.Tenancy;
 using Microsoft.EntityFrameworkCore;
@@ -88,7 +89,10 @@ public static class FeedEndpoints
         {
             var accountId = accountContext.AccountId!.Value;
             var entries = await db.ShowWatchProgresses
-                .Where(p => p.AccountId == accountId)
+                .Where(p => p.AccountId == accountId
+                    // Manually dropped shows leave Continue Watching (exclude-only, revocable).
+                    && !db.UserTitleReactions.Any(r => r.AccountId == accountId && r.TitleId == p.TitleId
+                        && r.Kind == ReactionKind.Dropped && r.RevokedAt == null))
                 .OrderByDescending(p => p.ResumeLikelihood)
                 .Take(15)
                 .Join(db.Titles, p => p.TitleId, t => t.Id, (p, t) => new

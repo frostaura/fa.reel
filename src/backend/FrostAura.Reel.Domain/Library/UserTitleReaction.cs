@@ -6,6 +6,13 @@ public enum ReactionKind
 {
     NotInterested,
     SaveForLater,
+
+    /// <summary>
+    /// User manually dropped an in-progress show — hides it from Continue Watching only.
+    /// Revocable via <see cref="UserTitleReaction.RevokedAt"/>. Exclude-only: no rating, no
+    /// model penalty, no Trakt write-back (Trakt has no dropped concept).
+    /// </summary>
+    Dropped,
 }
 
 public enum ReactionReason

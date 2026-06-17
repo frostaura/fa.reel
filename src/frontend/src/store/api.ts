@@ -293,6 +293,38 @@ export const api = createApi({
         }
       },
     }),
+    markDropped: b.mutation<void, { mediaType: string; tmdbId: number }>({
+      query: ({ mediaType, tmdbId }) => ({ url: `titles/${mediaType}/${tmdbId}/reactions/dropped`, method: "POST" }),
+      invalidatesTags: ["Feed"], // continue-watching is tagged Feed
+      async onQueryStarted({ mediaType, tmdbId }, { dispatch, queryFulfilled }) {
+        const patch = dispatch(
+          api.util.updateQueryData("getTitle", { mediaType, tmdbId }, (draft) => {
+            draft.userState.dropped = true;
+          })
+        );
+        try {
+          await queryFulfilled;
+        } catch {
+          patch.undo();
+        }
+      },
+    }),
+    undrop: b.mutation<void, { mediaType: string; tmdbId: number }>({
+      query: ({ mediaType, tmdbId }) => ({ url: `titles/${mediaType}/${tmdbId}/reactions/dropped`, method: "DELETE" }),
+      invalidatesTags: ["Feed"],
+      async onQueryStarted({ mediaType, tmdbId }, { dispatch, queryFulfilled }) {
+        const patch = dispatch(
+          api.util.updateQueryData("getTitle", { mediaType, tmdbId }, (draft) => {
+            draft.userState.dropped = false;
+          })
+        );
+        try {
+          await queryFulfilled;
+        } catch {
+          patch.undo();
+        }
+      },
+    }),
     saveForLater: b.mutation<void, { mediaType: string; tmdbId: number }>({
       query: ({ mediaType, tmdbId }) => ({ url: `titles/${mediaType}/${tmdbId}/reactions/save_for_later`, method: "POST" }),
       async onQueryStarted({ mediaType, tmdbId }, { dispatch, queryFulfilled }) {
@@ -393,6 +425,8 @@ export const {
   useRateTitleMutation,
   useMarkNotInterestedMutation,
   useUndoNotInterestedMutation,
+  useMarkDroppedMutation,
+  useUndropMutation,
   useSaveForLaterMutation,
   useUnsaveForLaterMutation,
   useGetSavedQuery,

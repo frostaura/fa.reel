@@ -104,6 +104,7 @@ public static class TitleEndpoints
                     userRating = rating?.Rating,
                     savedForLater = reactions.Contains(nameof(ReactionKind.SaveForLater)),
                     notInterested = reactions.Contains(nameof(ReactionKind.NotInterested)),
+                    dropped = reactions.Contains(nameof(ReactionKind.Dropped)),
                 },
             });
         });

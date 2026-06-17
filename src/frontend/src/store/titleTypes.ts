@@ -40,6 +40,7 @@ export interface TitleDetailPayload {
     userRating: number | null;
     savedForLater: boolean;
     notInterested: boolean;
+    dropped: boolean;
   };
 }
 
