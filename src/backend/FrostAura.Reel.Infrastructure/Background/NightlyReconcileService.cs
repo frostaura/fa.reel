@@ -1,3 +1,5 @@
+using System.Text.Json;
+using FrostAura.Reel.Application.Sync;
 using FrostAura.Reel.Domain.Ml;
 using FrostAura.Reel.Domain.Sync;
 using FrostAura.Reel.Infrastructure.Persistence;
@@ -54,8 +56,34 @@ public sealed class NightlyReconcileService(
                 var retrainThreshold = configuration.GetValue("RETRAIN_MIN_NEW_RATINGS", 10);
                 var enqueued = 0;
                 var retrains = 0;
+                var listRemovals = 0;
                 foreach (var accountId in accountIds)
                 {
+                    // Managed-list auto-remove: anything in "Reel — Up Next" detected watched (via
+                    // sync, outside the app) leaves the live queue — the stated product promise.
+                    var watchedInList = await (
+                        from m in db.ManagedListItems
+                        join t in db.Titles on m.TitleId equals t.Id
+                        where m.AccountId == accountId && m.RemovedAt == null
+                            && db.WatchedTitles.Any(w => w.AccountId == accountId && w.TitleId == m.TitleId && w.IsFullyWatched)
+                        select new { Item = m, Title = t }).ToListAsync(stoppingToken);
+                    foreach (var x in watchedInList)
+                    {
+                        x.Item.RemovedAt = now;
+                        x.Item.RemovalReason = ListRemovalReason.Watched;
+                        db.TraktOutbox.Add(new TraktOutboxEntry
+                        {
+                            Id = Guid.NewGuid(),
+                            AccountId = accountId,
+                            Kind = OutboxKind.ListRemove,
+                            PayloadJson = JsonSerializer.Serialize(new OutboxDispatcher.OutboxPayload(
+                                x.Title.Id, x.Title.MediaType, x.Title.TmdbId, x.Title.TraktId, null, null)),
+                            EnqueuedAt = now,
+                            NextAttemptAt = now,
+                        });
+                        listRemovals++;
+                    }
+
                     var deltaInFlight = await db.SyncJobs.AnyAsync(
                         j => j.AccountId == accountId && j.Kind == JobKind.DeltaSync
                             && (j.Status == JobStatus.Pending || j.Status == JobStatus.Running),
@@ -107,7 +135,9 @@ public sealed class NightlyReconcileService(
                 }
 
                 await db.SaveChangesAsync(stoppingToken);
-                logger.LogInformation("Nightly reconcile: {Sync} delta sync(s), {Retrain} retrain(s).", enqueued, retrains);
+                logger.LogInformation(
+                    "Nightly reconcile: {Sync} delta sync(s), {Retrain} retrain(s), {ListRemove} managed-list removal(s).",
+                    enqueued, retrains, listRemovals);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
