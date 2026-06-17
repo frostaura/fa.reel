@@ -62,11 +62,15 @@ export default function Home() {
 
           {rows.map((row) => (
             <RecRow
-              key={row.anchorTitleId}
+              key={`${row.kind}:${row.anchorTitleId ?? row.title}`}
               title={
-                <>
-                  Because you loved <span className="text-fa-frost-bright">{row.anchorName}</span>
-                </>
+                row.kind === "because-you-loved" ? (
+                  <>
+                    Because you loved <span className="text-fa-frost-bright">{row.anchorName}</span>
+                  </>
+                ) : (
+                  <span className="text-fa-frost-bright">{row.title}</span>
+                )
               }
               items={row.items}
             />

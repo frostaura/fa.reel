@@ -16,8 +16,9 @@ export interface FeedCard {
 
 export interface FeedRow {
   kind: string;
-  anchorTitleId: string;
-  anchorName: string;
+  anchorTitleId: string | null;
+  anchorName: string | null;
+  title: string | null;
   items: FeedCard[];
 }
 

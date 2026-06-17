@@ -77,16 +77,31 @@ public static class FeedEndpoints
             var anchors = await db.Titles.Where(t => anchorIds.Contains(t.Id))
                 .ToDictionaryAsync(t => t.Id, t => t.Name, ct);
 
-            var rows = items
+            var rows = new List<object>();
+            rows.AddRange(items
                 .Where(x => x.Item.Row == FeedRowKind.BecauseYouLoved && x.Item.AnchorTitleId != null)
                 .GroupBy(x => x.Item.AnchorTitleId!.Value)
-                .Select(g => new
+                .Select(g => (object)new
                 {
                     kind = "because-you-loved",
-                    anchorTitleId = g.Key,
+                    anchorTitleId = (Guid?)g.Key,
                     anchorName = anchors.GetValueOrDefault(g.Key, ""),
-                    items = g.OrderBy(x => x.Item.Rank).Select(x => ToCard(x.Item, x.Title)),
-                });
+                    title = (string?)null,
+                    items = g.OrderBy(x => x.Item.Rank).Select(x => ToCard(x.Item, x.Title)).ToList(),
+                }));
+
+            void AddKindRow(FeedRowKind kind, string slug, string label)
+            {
+                var rowItems = items.Where(x => x.Item.Row == kind)
+                    .OrderBy(x => x.Item.Rank).Select(x => ToCard(x.Item, x.Title)).ToList();
+                if (rowItems.Count > 0)
+                {
+                    rows.Add(new { kind = slug, anchorTitleId = (Guid?)null, anchorName = (string?)null, title = (string?)label, items = rowItems });
+                }
+            }
+
+            AddKindRow(FeedRowKind.DeepCuts, "deep-cuts", "Deep cuts — under-the-radar, high for you");
+            AddKindRow(FeedRowKind.NewForYou, "new-for-you", "New & for you");
 
             return Results.Ok(new { generatedAt = (DateTime?)snapshot.GeneratedAt, hero, rows, lockedRowCount = 0 });
         });

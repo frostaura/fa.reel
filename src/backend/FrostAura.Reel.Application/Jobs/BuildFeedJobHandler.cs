@@ -320,6 +320,42 @@ public class BuildFeedJobHandler(
             }
         }
 
+        // ── v1.1 rows: Deep cuts (high predicted × low popularity) + New & for you ──────────
+        // The discover pool skews popular (sorted by popularity), so the deep-cuts bar is the
+        // lower-popularity 70th percentile + a modest predicted floor — populated when it can be.
+        var popThreshold = candidates.Count > 0
+            ? candidates.Select(c => c.Title.TmdbPopularity ?? 0m).OrderBy(p => p).ElementAt(candidates.Count * 7 / 10)
+            : 0m;
+        var deepCuts = candidates
+            .Where(c => !used.Contains(c.Title.Id) && c.Predicted >= Math.Max(6m, minPredicted)
+                && (c.Title.TmdbPopularity ?? 0m) < popThreshold)
+            .OrderByDescending(c => c.Predicted)
+            .Take(RowSize)
+            .ToList();
+        if (deepCuts.Count >= 4)
+        {
+            for (var i = 0; i < deepCuts.Count; i++)
+            {
+                used.Add(deepCuts[i].Title.Id);
+                AddItem(FeedRowKind.DeepCuts, null, i, deepCuts[i], WhyThis(deepCuts[i], null));
+            }
+        }
+
+        var newForYou = candidates
+            .Where(c => !used.Contains(c.Title.Id) && c.Predicted >= minPredicted
+                && (c.Title.ReleasedAt ?? c.Title.FirstAiredAt) is { } r && (now - r).TotalDays <= 900)
+            .OrderByDescending(c => (double)c.Predicted * (double)Freshness(c.Title))
+            .Take(RowSize)
+            .ToList();
+        if (newForYou.Count >= 4)
+        {
+            for (var i = 0; i < newForYou.Count; i++)
+            {
+                used.Add(newForYou[i].Title.Id);
+                AddItem(FeedRowKind.NewForYou, null, i, newForYou[i], WhyThis(newForYou[i], null));
+            }
+        }
+
         // Prune snapshot history beyond the last 7.
         var staleIds = await db.FeedSnapshots
             .Where(s => s.AccountId == account.Id)
