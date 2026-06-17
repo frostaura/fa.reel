@@ -140,7 +140,10 @@ public class OpenRouterSearchInterpreter(
 
         foreach (var raw in tokens)
         {
-            var token = raw.TrimEnd('s'); // crude singularise: "horrors" → "horror", "movies" → "movie"
+            // Crude singularise: "horrors" → "horror", "mysteries" → "mystery", "comedies" → "comedy".
+            var token = raw.EndsWith("ies", StringComparison.Ordinal) && raw.Length > 4
+                ? string.Concat(raw.AsSpan(0, raw.Length - 3), "y")
+                : raw.TrimEnd('s');
             if (raw is "movie" or "movies" or "film" or "films")
             {
                 if (!media.Contains(MediaType.Movie)) media.Add(MediaType.Movie);

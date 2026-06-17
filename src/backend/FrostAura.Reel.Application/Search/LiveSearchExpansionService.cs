@@ -172,10 +172,13 @@ public sealed class LiveSearchExpansionService(
         }
 
         // The whole TMDB firehose for this query runs once even under concurrent identical
-        // searches; the loser awaits the winner's items rather than re-hitting TMDB.
+        // searches; the loser awaits the winner's items rather than re-hitting TMDB. The shared
+        // fetch uses CancellationToken.None — it must NOT be killed when one waiter disconnects
+        // (e.g. a dev StrictMode remount aborting the first request would otherwise starve the
+        // second sharing the same key). It's bounded by HTTP timeouts and warms the cache anyway.
         var items = await coordinator.RunOnceAsync(
             $"askreel:fetch:{normalized}",
-            () => FetchFromTmdbAsync(query, region, ct));
+            () => FetchFromTmdbAsync(query, region, CancellationToken.None));
 
         if (items.Count == 0)
         {
