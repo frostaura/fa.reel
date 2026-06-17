@@ -1,10 +1,12 @@
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { LogOut, Settings as SettingsIcon, FlaskConical } from "lucide-react";
 import { useGetSessionQuery, useLogoutMutation, api } from "../store/api";
 import { useDispatch } from "react-redux";
 import type { AppDispatch } from "../store";
 import SyncStatusPill from "./SyncStatusPill";
 import SearchBox from "./search/SearchBox";
+import MobileTabBar from "./MobileTabBar";
 import Footer from "./Footer";
 import RealtimeSync from "./RealtimeSync";
 import {
@@ -24,7 +26,14 @@ export default function Layout() {
   const { data: session } = useGetSessionQuery();
   const [logout] = useLogoutMutation();
   const navigate = useNavigate();
+  const location = useLocation();
   const dispatch = useDispatch<AppDispatch>();
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+
+  // A navigation (tapping a typeahead result or Ask Reel) closes the mobile search panel.
+  useEffect(() => {
+    setMobileSearchOpen(false);
+  }, [location.pathname, location.search]);
 
   const handleSignOut = async () => {
     await logout().unwrap().catch(() => undefined);
@@ -40,7 +49,8 @@ export default function Layout() {
           <Link to="/home" className="text-lg font-light tracking-wide text-fa-frost-bright">
             Reel
           </Link>
-          <nav className="flex items-center gap-1">
+          {/* Inline nav lives on desktop; mobile uses the bottom tab bar. */}
+          <nav className="hidden md:flex items-center gap-1">
             <NavLink to="/home" className={navLinkClass}>
               Home
             </NavLink>
@@ -84,11 +94,18 @@ export default function Layout() {
             </DropdownMenu>
           </div>
         </div>
+        {/* Mobile search panel — slides under the header so typeahead + Ask Reel work on a phone. */}
+        {mobileSearchOpen && (
+          <div className="md:hidden border-t border-fa-edge/50 bg-fa-ink/95 backdrop-blur-md px-4 py-3" data-testid="mobile-search-panel">
+            <SearchBox />
+          </div>
+        )}
       </header>
-      <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 py-6">
+      <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 py-6 pb-24 md:pb-6">
         <Outlet />
       </main>
       <Footer />
+      <MobileTabBar searchOpen={mobileSearchOpen} onToggleSearch={() => setMobileSearchOpen((v) => !v)} />
     </div>
   );
 }
