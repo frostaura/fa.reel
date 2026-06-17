@@ -36,7 +36,10 @@ public class OpenRouterSearchAgent(
 
     public string ModelId => StubMode
         ? "stub/deterministic-v1"
-        : configuration["REEL_SEARCH_MODEL"] ?? configuration["OPENROUTER_MODEL"] ?? "openai/gpt-5.4-mini";
+        // Empty env vars are "present but blank" to .NET config, which defeats ?? — treat blank as absent.
+        : configuration["REEL_SEARCH_MODEL"] is { Length: > 0 } m ? m
+        : configuration["OPENROUTER_MODEL"] is { Length: > 0 } o ? o
+        : "openai/gpt-5.4-mini";
 
     public async Task<AgentReply> InterpretAsync(
         IReadOnlyList<ChatTurn> history, string message, string tasteSummary, IReadOnlyList<string> shownTitles, CancellationToken ct = default)
