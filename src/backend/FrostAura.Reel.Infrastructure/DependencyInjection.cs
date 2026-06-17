@@ -138,6 +138,7 @@ public static class DependencyInjection
         services.AddHostedService<JobRunnerService>();
         services.AddHostedService<TraktDeltaPollService>();
         services.AddHostedService<NightlyReconcileService>();
+        services.AddHostedService<CatalogGrowthService>();
         services.AddHostedService<TokenRefreshService>();
         services.AddHostedService<TraktOutboxDispatcherService>();
 
