@@ -50,8 +50,18 @@ public class TraktOAuthService(
             return null;
         }
 
-        var tokens = await traktClient.ExchangeCodeAsync(code, ct);
-        return await LinkAccountAsync(tokens, countryHint, ct);
+        try
+        {
+            var tokens = await traktClient.ExchangeCodeAsync(code, ct);
+            return await LinkAccountAsync(tokens, countryHint, ct);
+        }
+        catch (Exception ex)
+        {
+            // Log the real reason (Trakt's error body is now in the message) and return null so
+            // the endpoint answers a clean 400 rather than a 500 — the SPA shows "try again".
+            logger.LogError(ex, "Trakt code exchange / account link failed during sign-in.");
+            return null;
+        }
     }
 
     /// <summary>

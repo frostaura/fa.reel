@@ -208,7 +208,14 @@ public class TraktClient(
         usageRecorder.Record(ApiProvider.Trakt);
 
         using var response = await httpClient.PostAsJsonAsync("oauth/token", payload, JsonOptions, ct);
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            // Surface Trakt's actual error (invalid_grant / redirect_uri mismatch / invalid_client)
+            // instead of a bare status code — the token exchange is otherwise a black box.
+            var body = await response.Content.ReadAsStringAsync(ct);
+            throw new InvalidOperationException(
+                $"Trakt oauth/token failed: {(int)response.StatusCode} {response.StatusCode} — redirect_uri={payload.GetValueOrDefault("redirect_uri")} — body: {body}");
+        }
 
         var token = await response.Content.ReadFromJsonAsync<TokenDto>(JsonOptions, ct)
             ?? throw new InvalidOperationException("Empty Trakt token response.");

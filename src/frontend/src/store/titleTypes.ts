@@ -43,6 +43,23 @@ export interface TitleDetailPayload {
   };
 }
 
+/** Where-to-watch payload (mirrors ProviderEndpoints). */
+export interface ProviderEntry {
+  provider: string;
+  logoPath: string | null;
+  kinds: string[];
+  linkKind: "direct" | "tmdb";
+  url: string;
+  displayPriority: number;
+}
+
+export interface ProvidersPayload {
+  region: string;
+  attribution: string;
+  tmdbWatchPage: string;
+  providers: ProviderEntry[];
+}
+
 export interface SavedEntry {
   titleId: string;
   mediaType: "Movie" | "Show";

@@ -1,6 +1,6 @@
 import { createApi, fetchBaseQuery, type BaseQueryFn, type FetchArgs, type FetchBaseQueryError } from "@reduxjs/toolkit/query/react";
 import type { ContinueEntry, FeedPayload } from "./feedTypes";
-import type { SavedEntry, TitleDetailPayload } from "./titleTypes";
+import type { ProvidersPayload, SavedEntry, TitleDetailPayload } from "./titleTypes";
 
 export interface TypeaheadTitle {
   titleId: string;
@@ -238,6 +238,10 @@ export const api = createApi({
       query: ({ mediaType, tmdbId }) => `titles/${mediaType}/${tmdbId}`,
       providesTags: (_r, _e, arg) => [{ type: "Title", id: `${arg.mediaType}:${arg.tmdbId}` }],
     }),
+    getProviders: b.query<ProvidersPayload, { mediaType: string; tmdbId: number }>({
+      query: ({ mediaType, tmdbId }) => `titles/${mediaType}/${tmdbId}/providers`,
+      providesTags: (_r, _e, arg) => [{ type: "Title", id: `providers:${arg.mediaType}:${arg.tmdbId}` }],
+    }),
     rateTitle: b.mutation<{ userRating: number }, { mediaType: string; tmdbId: number; rating: number; markWatched?: boolean }>({
       query: ({ mediaType, tmdbId, ...body }) => ({ url: `titles/${mediaType}/${tmdbId}/rating`, method: "POST", body }),
       async onQueryStarted({ mediaType, tmdbId, rating }, { dispatch, queryFulfilled }) {
@@ -385,6 +389,7 @@ export const {
   useGetContinueWatchingQuery,
   useRebuildFeedMutation,
   useGetTitleQuery,
+  useGetProvidersQuery,
   useRateTitleMutation,
   useMarkNotInterestedMutation,
   useUndoNotInterestedMutation,

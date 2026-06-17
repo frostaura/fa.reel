@@ -19,6 +19,11 @@ export function profileUrl(path: string | null | undefined): string | null {
   return path ? `${BASE}w185${path}` : null;
 }
 
+/** Streaming-provider logo (where-to-watch chips). TMDB serves square logos on the same ladder. */
+export function logoUrl(path: string | null | undefined, size: "w45" | "w92" = "w92"): string | null {
+  return path ? `${BASE}${size}${path}` : null;
+}
+
 /** DPR-aware srcset for poster slots. */
 export function posterSrcSet(path: string | null | undefined): string | undefined {
   if (!path) return undefined;

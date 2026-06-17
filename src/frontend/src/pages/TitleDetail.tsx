@@ -12,6 +12,7 @@ import {
 import { backdropUrl, profileUrl } from "../lib/tmdbImages";
 import PosterImage from "../components/rec/PosterImage";
 import PredictedRatingBadge from "../components/rec/PredictedRatingBadge";
+import WhereToWatch from "../components/title/WhereToWatch";
 import { formatRuntime } from "../lib/format";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
 import {
@@ -21,28 +22,52 @@ import {
   DropdownMenuTrigger,
 } from "../components/ui/dropdown-menu";
 
-/** Humanize a model feature name for the breakdown bars. */
+/** Humanize a model feature name for the breakdown bars. Covers every FeatureSchema scalar; any
+ *  future/unmapped name falls back to a camelCase→words humanizer so no raw token ever shows. */
 function featureLabel(feature: string): string {
-  if (feature.startsWith("genre:")) return feature.slice(6).replace("-", " ");
+  if (feature.startsWith("genre:")) return feature.slice(6).replace(/-/g, " ");
+  if (feature.startsWith("subgenreBucket:")) return "theme match";
   const map: Record<string, string> = {
+    // cast & crew
     castAffinity: "cast you rate highly",
     lovedCastCount: "favourite cast members",
     directorAffinity: "director affinity",
     writerAffinity: "writer affinity",
+    hasCredits: "cast & crew data",
+    // genre / era
     userGenreAffinity: "your genre taste",
     genreDrift: "recent genre streak",
     decadeAffinity: "your favourite era",
+    // crowd signals
     traktRating: "crowd rating",
+    traktVotesLog: "vote volume",
     tmdbPopularityLog: "popularity",
     contrarianAdjustedRating: "your contrarian lens",
-    showEngagement: "your episode ratings",
+    // title scalars
     releaseAgeLog: "release recency",
     runtimeMinutes: "runtime",
     certificationOrdinal: "maturity rating",
     isShow: "series format",
-    traktVotesLog: "vote volume",
+    showEngagement: "your episode ratings",
+    // LLM tone attributes
+    attrDarkness: "tone (darkness)",
+    attrPacing: "pacing",
+    attrComplexity: "complexity",
+    attrEmotionalIntensity: "emotional intensity",
+    attrHumor: "humor",
+    attrOptimism: "optimism",
+    attrEnsembleVsSolo: "ensemble vs. lead",
+    hasAttributes: "tone analysis",
+    // plot-embedding similarities
+    simLovedCentroid: "close in feel to titles you love",
+    simRecentCentroid: "matches your recent taste",
+    simTopLovedMax: "very close to a favourite",
+    simTopLovedMean: "feels like your favourites",
+    hasEmbedding: "story similarity",
   };
-  return map[feature] ?? feature;
+  if (map[feature]) return map[feature];
+  // camelCase → spaced words, lower-cased (e.g. "simTopLovedMax" → "sim top loved max").
+  return feature.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
 }
 
 export default function TitleDetail() {
@@ -230,11 +255,16 @@ export default function TitleDetail() {
               )}
 
               {/* Credits */}
-              {(title.directors.length > 0 || title.cast.length > 0) && (
+              {(title.directors.length > 0 || title.writers.length > 0 || title.cast.length > 0) && (
                 <section className="space-y-3">
                   {title.directors.length > 0 && (
                     <p className="fa-caption text-fa-frost-dim">
                       Directed by <span className="text-fa-frost">{title.directors.map((d) => d.name).join(", ")}</span>
+                    </p>
+                  )}
+                  {title.writers.length > 0 && (
+                    <p className="fa-caption text-fa-frost-dim">
+                      Written by <span className="text-fa-frost">{title.writers.map((w) => w.name).join(", ")}</span>
                     </p>
                   )}
                   {title.cast.length > 0 && (
@@ -257,6 +287,11 @@ export default function TitleDetail() {
                     </div>
                   )}
                 </section>
+              )}
+
+              {/* Where to watch */}
+              {title.tmdbId != null && (
+                <WhereToWatch mediaType={mediaType} tmdbId={title.tmdbId} />
               )}
             </div>
           </>
