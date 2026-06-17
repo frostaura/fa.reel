@@ -1,6 +1,5 @@
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
+using FrostAura.Reel.Application.Ml;
 using FrostAura.Reel.Application.Persistence;
 using FrostAura.Reel.Application.Pipeline;
 using FrostAura.Reel.Domain.Catalog;
@@ -84,16 +83,18 @@ public class EnrichCatalogJobHandler(
     private async Task<Cursor> EmbedAsync(
         SyncJob job, Guid accountId, IQueryable<Title> scopeQuery, Cursor cursor, CancellationToken ct)
     {
-        var pendingQuery = scopeQuery
-            .Where(t => !db.TitleEmbeddings.Any(e => e.TitleId == t.Id))
-            .OrderBy(t => t.Id);
-        var total = await pendingQuery.CountAsync(ct);
+        // Scan every hydrated title and embed those MISSING a vector or whose source text / model
+        // has drifted (SourceTextHash mismatch). Re-embedding on change is cheap and stops a title
+        // from being frozen with a stale vector after a metadata refresh — the live search path
+        // writes vectors through the same EmbeddingText helper, so the two never disagree.
+        var ordered = scopeQuery.OrderBy(t => t.Id);
+        var total = await ordered.CountAsync(ct);
         var processed = 0;
 
         while (!ct.IsCancellationRequested)
         {
             var lastId = cursor.LastTitleId;
-            var batch = await pendingQuery
+            var batch = await ordered
                 .Where(t => lastId == null || t.Id > lastId)
                 .Take(EmbedBatch)
                 .ToListAsync(ct);
@@ -102,19 +103,48 @@ public class EnrichCatalogJobHandler(
                 break;
             }
 
-            var texts = batch.Select(EmbedText).ToList();
-            var vectors = await embeddings.EmbedAsync(texts, ct);
+            var batchIds = batch.Select(t => t.Id).ToList();
+            var existing = await db.TitleEmbeddings
+                .Where(e => batchIds.Contains(e.TitleId))
+                .ToDictionaryAsync(e => e.TitleId, ct);
 
-            for (var i = 0; i < batch.Count; i++)
+            var stale = new List<(Title Title, string Text, string Hash, TitleEmbedding? Row)>();
+            foreach (var title in batch)
             {
-                db.TitleEmbeddings.Add(new TitleEmbedding
+                var text = EmbeddingText.Build(title);
+                var hash = EmbeddingText.Hash(text);
+                var row = existing.GetValueOrDefault(title.Id);
+                if (row is null || row.SourceTextHash != hash || row.EmbeddingModel != EmbeddingText.Model)
                 {
-                    TitleId = batch[i].Id,
-                    Embedding = new Vector(vectors[i]),
-                    EmbeddingModel = "text-embedding-3-small",
-                    SourceTextHash = Sha256(texts[i]),
-                    CreatedAt = DateTime.UtcNow,
-                });
+                    stale.Add((title, text, hash, row));
+                }
+            }
+
+            if (stale.Count > 0)
+            {
+                var vectors = await embeddings.EmbedAsync(stale.Select(s => s.Text).ToList(), ct);
+                for (var i = 0; i < stale.Count; i++)
+                {
+                    var (title, _, hash, row) = stale[i];
+                    if (row is null)
+                    {
+                        db.TitleEmbeddings.Add(new TitleEmbedding
+                        {
+                            TitleId = title.Id,
+                            Embedding = new Vector(vectors[i]),
+                            EmbeddingModel = EmbeddingText.Model,
+                            SourceTextHash = hash,
+                            CreatedAt = DateTime.UtcNow,
+                        });
+                    }
+                    else
+                    {
+                        row.Embedding = new Vector(vectors[i]);
+                        row.EmbeddingModel = EmbeddingText.Model;
+                        row.SourceTextHash = hash;
+                        row.CreatedAt = DateTime.UtcNow;
+                    }
+                }
             }
 
             processed += batch.Count;
@@ -247,29 +277,4 @@ public class EnrichCatalogJobHandler(
         }
     }
 
-    /// <summary>Plot/tone source text — name, year, genres and overview, the signal an embedding captures.</summary>
-    private static string EmbedText(Title title)
-    {
-        var sb = new StringBuilder();
-        sb.Append(title.Name);
-        if (title.Year is { } year)
-        {
-            sb.Append(" (").Append(year).Append(')');
-        }
-
-        if (title.Genres.Length > 0)
-        {
-            sb.Append(". ").Append(string.Join(", ", title.Genres));
-        }
-
-        if (!string.IsNullOrWhiteSpace(title.Overview))
-        {
-            sb.Append(". ").Append(title.Overview);
-        }
-
-        return sb.ToString();
-    }
-
-    private static string Sha256(string text) =>
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
 }

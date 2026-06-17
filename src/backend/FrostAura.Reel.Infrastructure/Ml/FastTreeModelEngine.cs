@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using FrostAura.Reel.Domain.Ports;
 using Microsoft.ML;
@@ -14,6 +15,12 @@ namespace FrostAura.Reel.Infrastructure.Ml;
 public class FastTreeModelEngine : IModelEngine
 {
     public record Hyperparams(int Trees = 200, int Leaves = 20, int MinExamplesPerLeaf = 10, double LearningRate = 0.2);
+
+    // Request-path model cache: loaded transformers keyed by artifact id. ITransformer.Transform is
+    // safe for concurrent reads (unlike PredictionEngine), so one load serves every request.
+    private readonly ConcurrentDictionary<Guid, ITransformer> _modelCache = new();
+    private readonly MLContext _cacheMl = new(seed: 7);
+    private const int MaxCachedModels = 32;
 
     private sealed class Row
     {
@@ -94,6 +101,35 @@ public class FastTreeModelEngine : IModelEngine
 
         var scored = model.Transform(data);
         return ml.Data.CreateEnumerable<Prediction>(scored, reuseRowObject: false)
+            .Select(p => p.Score)
+            .ToArray();
+    }
+
+    public float[] ScoreCached(Guid modelKey, byte[] artifactBytes, float[][] features)
+    {
+        if (features.Length == 0)
+        {
+            return [];
+        }
+
+        if (_modelCache.Count > MaxCachedModels)
+        {
+            _modelCache.Clear(); // coarse bound — a handful of active artifacts in practice
+        }
+
+        var model = _modelCache.GetOrAdd(modelKey, _ =>
+        {
+            using var stream = new MemoryStream(artifactBytes);
+            return _cacheMl.Model.Load(stream, out DataViewSchema _);
+        });
+
+        var width = features[0].Length;
+        var data = _cacheMl.Data.LoadFromEnumerable(
+            features.Select(f => new Row { Features = f }),
+            SchemaDefinitionFor(width));
+
+        var scored = model.Transform(data);
+        return _cacheMl.Data.CreateEnumerable<Prediction>(scored, reuseRowObject: false)
             .Select(p => p.Score)
             .ToArray();
     }

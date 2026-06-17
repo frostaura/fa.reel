@@ -89,9 +89,14 @@ public static class DependencyInjection
             client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
         }).AddStandardResilienceHandler();
 
+        // ── Shared-work coordination + request caching ───────────────────────────────────
+        services.AddMemoryCache();
+        services.AddSingleton<Application.Abstractions.ICatalogWorkCoordinator, Concurrency.CatalogWorkCoordinator>();
+
         // ── ML engine ──────────────────────────────────────────────────────────────────────
         services.AddSingleton<IModelEngine, Ml.FastTreeModelEngine>();
         services.AddScoped<Application.Ml.FeatureVectorBuilder>();
+        services.AddScoped<Application.Ml.OnDemandScorer>();
         services.AddScoped<Application.Ml.EvalHarness>();
 
         // ── Serving pipeline ─────────────────────────────────────────────────────────────
