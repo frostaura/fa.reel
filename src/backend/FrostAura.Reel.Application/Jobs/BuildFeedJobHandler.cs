@@ -117,6 +117,24 @@ public class BuildFeedJobHandler(
 
         account.PipelineStage = PipelineStage.FeedReady;
         account.PipelineStageChangedAt = now;
+
+        // Warm streaming availability for the new feed's titles so the cards' provider strips
+        // populate (bounded, 24h-cached, global-shared). Skip if one's already queued.
+        var availabilityQueued = await db.SyncJobs.AnyAsync(
+            j => j.AccountId == accountId && j.Kind == JobKind.RefreshAvailability
+                && (j.Status == JobStatus.Pending || j.Status == JobStatus.Running), ct);
+        if (!availabilityQueued)
+        {
+            db.SyncJobs.Add(new SyncJob
+            {
+                Id = Guid.NewGuid(),
+                AccountId = accountId,
+                Kind = JobKind.RefreshAvailability,
+                Priority = 3,
+                EnqueuedAt = now,
+            });
+        }
+
         await db.SaveChangesAsync(ct);
 
         events.Publish(accountId, PipelineEventTypes.StageChanged, new Dictionary<string, object?> { ["stage"] = "FeedReady" });

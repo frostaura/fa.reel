@@ -134,6 +134,7 @@ public static class DependencyInjection
         services.AddScoped<IJobHandler, TrainJobHandler>();
         services.AddScoped<IJobHandler, EvaluateJobHandler>();
         services.AddScoped<IJobHandler, BuildFeedJobHandler>();
+        services.AddScoped<IJobHandler, RefreshAvailabilityJobHandler>();
         services.AddHostedService<JobRunnerService>();
         services.AddHostedService<TraktDeltaPollService>();
         services.AddHostedService<NightlyReconcileService>();
