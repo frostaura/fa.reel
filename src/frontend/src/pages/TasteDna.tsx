@@ -10,7 +10,10 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { Share2 } from "lucide-react";
+import { toPng } from "html-to-image";
 import { useGetTasteDnaQuery } from "../store/api";
 import { profileUrl } from "../lib/tmdbImages";
 
@@ -36,6 +39,8 @@ function ChartTip({ active, payload, label }: { active?: boolean; payload?: { na
 /** The free hook: who you are, in data. Built screenshot-clean — this page is the viral loop. */
 export default function TasteDna() {
   const { data } = useGetTasteDnaQuery();
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [sharing, setSharing] = useState(false);
 
   if (!data) {
     return <div className="h-72 rounded-2xl reel-shimmer" />;
@@ -44,13 +49,49 @@ export default function TasteDna() {
   const driftData = data.drift.map((d) => ({ year: d.year, ...d.shares }));
   const driftGenres = data.topGenres.slice(0, 5).map((g) => g.genre);
 
+  // Export a shareable PNG. Excludes the avatar grid (cross-origin TMDB images would taint the
+  // canvas) and any stray <img>; the radar + stats + branding are the shareable core.
+  const share = async () => {
+    if (!cardRef.current) return;
+    setSharing(true);
+    try {
+      const dataUrl = await toPng(cardRef.current, {
+        backgroundColor: "#06121F",
+        pixelRatio: 2,
+        filter: (node) => {
+          const el = node as HTMLElement;
+          return el.tagName !== "IMG" && el.dataset?.shareExclude === undefined;
+        },
+      });
+      const link = document.createElement("a");
+      link.download = "my-reel-taste-dna.png";
+      link.href = dataUrl;
+      link.click();
+    } catch {
+      // Capture can fail on some browsers — degrade silently.
+    } finally {
+      setSharing(false);
+    }
+  };
+
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-light text-fa-frost-bright">Your taste DNA</h1>
-        <p className="fa-caption text-fa-frost-dim mt-1">
-          computed from {data.ratingsCount.toLocaleString()} ratings · always yours, always free
-        </p>
+    <div ref={cardRef} className="space-y-8">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-light text-fa-frost-bright">Your taste DNA</h1>
+          <p className="fa-caption text-fa-frost-dim mt-1">
+            computed from {data.ratingsCount.toLocaleString()} ratings · always yours, always free
+          </p>
+        </div>
+        <button
+          onClick={share}
+          disabled={sharing}
+          data-share-exclude
+          data-testid="dna-share"
+          className="fa-button-ghost flex items-center gap-2 shrink-0 disabled:opacity-50"
+        >
+          <Share2 className="h-4 w-4" /> {sharing ? "Rendering…" : "Share card"}
+        </button>
       </div>
 
       {/* Headline stats */}
@@ -140,7 +181,7 @@ export default function TasteDna() {
         </section>
       )}
 
-      <div className="grid lg:grid-cols-2 gap-6">
+      <div className="grid lg:grid-cols-2 gap-6" data-share-exclude>
         {/* Creators */}
         <section className="fa-card p-5">
           <h2 className="fa-section-title mb-3">Creator affinities</h2>
