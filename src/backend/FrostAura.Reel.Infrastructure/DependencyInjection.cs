@@ -81,6 +81,14 @@ public static class DependencyInjection
             client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
         }).AddStandardResilienceHandler();
 
+        services.AddHttpClient<ITitleAttributeExtractor, OpenRouterAttributeExtractor>(client =>
+        {
+            var baseUrl = configuration["OPENROUTER_BASE_URL"] ?? "https://openrouter.ai/api/v1";
+            client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromSeconds(60); // chat completions run longer than embeddings
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
+        }).AddStandardResilienceHandler();
+
         // ── ML engine ──────────────────────────────────────────────────────────────────────
         services.AddSingleton<IModelEngine, Ml.FastTreeModelEngine>();
         services.AddScoped<Application.Ml.FeatureVectorBuilder>();
@@ -100,6 +108,7 @@ public static class DependencyInjection
         services.AddScoped<IJobHandler, FullIngestJobHandler>();
         services.AddScoped<IJobHandler, DeltaSyncJobHandler>();
         services.AddScoped<IJobHandler, HydrateCatalogJobHandler>();
+        services.AddScoped<IJobHandler, EnrichCatalogJobHandler>();
         services.AddScoped<IJobHandler, TrainJobHandler>();
         services.AddScoped<IJobHandler, EvaluateJobHandler>();
         services.AddScoped<IJobHandler, BuildFeedJobHandler>();

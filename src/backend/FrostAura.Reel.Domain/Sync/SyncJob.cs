@@ -8,7 +8,7 @@ public enum JobKind
     DeltaSync,
     FullReconcile,
     HydrateCatalog,
-    ExtractFeatures,
+    EnrichCatalog,
     Train,
     Evaluate,
     BuildFeed,

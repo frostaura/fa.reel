@@ -67,17 +67,19 @@ public class HydrateCatalogJobHandler(
             });
         }
 
-        // Library enriched → fit the first model automatically (pipeline chain).
-        var hasTrain = await db.SyncJobs.AnyAsync(
-            j => j.AccountId == accountId && (j.Kind == JobKind.Train || j.Kind == JobKind.Evaluate)
+        // Library hydrated → enrich it (embeddings + LLM attributes), which then chains to Train.
+        // EnrichCatalog is a clean no-op without LLM keys, so the chain reaches Train regardless.
+        var hasDownstream = await db.SyncJobs.AnyAsync(
+            j => j.AccountId == accountId
+                && (j.Kind == JobKind.EnrichCatalog || j.Kind == JobKind.Train || j.Kind == JobKind.Evaluate)
                 && (j.Status == JobStatus.Pending || j.Status == JobStatus.Running), ct);
-        if (!hasTrain)
+        if (!hasDownstream)
         {
             db.SyncJobs.Add(new SyncJob
             {
                 Id = Guid.NewGuid(),
                 AccountId = accountId,
-                Kind = JobKind.Train,
+                Kind = JobKind.EnrichCatalog,
                 Priority = 1,
                 EnqueuedAt = DateTime.UtcNow,
             });
