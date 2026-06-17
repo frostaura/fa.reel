@@ -153,9 +153,55 @@ public static class SearchEndpoints
 
             return Results.Ok(new { available = true, mode = "lexical", reason = (string?)null, results = (object)results });
         });
+
+        // Live "Ask Reel": pulls matching titles from TMDB on the fly, embeds + personally scores
+        // them, and STREAMS the experience (SSE: phase → candidate → candidate-scored → done) so
+        // an engaging, live-updating UI appears instantly. Consumed via fetch + ReadableStream.
+        group.MapPost("/ask", async (
+            AskRequest request,
+            HttpContext http,
+            LiveSearchExpansionService expansion,
+            IAccountContext accountContext,
+            IReelDbContext db,
+            CancellationToken ct) =>
+        {
+            if (accountContext.AccountId is not { } accountId)
+            {
+                return Results.Unauthorized();
+            }
+
+            http.Response.Headers.ContentType = "text/event-stream";
+            http.Response.Headers.CacheControl = "no-cache";
+            http.Response.Headers.Connection = "keep-alive";
+            http.Response.Headers["X-Accel-Buffering"] = "no";
+            await http.Response.Body.FlushAsync(ct);
+
+            var region = await db.Accounts.Where(a => a.Id == accountId).Select(a => a.Region).FirstOrDefaultAsync(ct);
+            var jsonOptions = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web);
+
+            LiveSearchExpansionService.Emit emit = async (eventName, payload) =>
+            {
+                var json = System.Text.Json.JsonSerializer.Serialize(payload, jsonOptions);
+                await http.Response.WriteAsync($"event: {eventName}\ndata: {json}\n\n", ct);
+                await http.Response.Body.FlushAsync(ct);
+            };
+
+            try
+            {
+                await expansion.StreamAsync(request.Query ?? string.Empty, region, emit, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                // client navigated away mid-stream — normal teardown
+            }
+
+            return Results.Empty;
+        });
     }
 
     public record SemanticRequest(string Query);
+
+    public record AskRequest(string Query);
 
     /// <summary>The account's MinPredictedRating floor (0 = off) — recommendation surfaces only.</summary>
     public static async Task<decimal> MinPredictedFloorAsync(IReelDbContext db, Guid accountId, CancellationToken ct)

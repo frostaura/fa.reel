@@ -3,6 +3,9 @@ namespace FrostAura.Reel.Domain.Ports.Tmdb;
 /// <summary>One provider entry from TMDB watch/providers for a region.</summary>
 public record TmdbWatchProvider(int ProviderId, string Name, string? LogoPath, int DisplayPriority, Providers.AvailabilityKind Kind);
 
+/// <summary>A TMDB keyword (concept tag) — resolved from free text to drive concept discovery.</summary>
+public record TmdbKeyword(int Id, string Name);
+
 /// <summary>One entry of a TMDB list payload (discover/trending) — enough to seed a candidate.</summary>
 public record TmdbListItem(
     long Id,

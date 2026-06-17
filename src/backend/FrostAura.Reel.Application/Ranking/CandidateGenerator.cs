@@ -64,13 +64,19 @@ public class CandidateGenerator(
             .Select(g => g.First())
             .ToList();
 
-        var upserted = await UpsertAsync(items, ct);
+        var upserted = await UpsertCandidatesAsync(items, ct);
         logger.LogInformation("Candidate pool refreshed: {Items} TMDB items ({Upserted} new) across genres [{Genres}].",
             items.Count, upserted, string.Join(", ", topGenres));
         return items.Count;
     }
 
-    private async Task<int> UpsertAsync(IReadOnlyList<TmdbListItem> items, CancellationToken ct)
+    /// <summary>
+    /// Upserts TMDB list items as global, TMDB-only <see cref="Title"/> rows (dedup by
+    /// (MediaType, TmdbId); TraktId resolves lazily). Reused by the feed pool and live Ask Reel
+    /// expansion. Summary-only — credits/keywords/embeddings come later via hydrate/enrich.
+    /// Returns the count of newly-created rows.
+    /// </summary>
+    public async Task<int> UpsertCandidatesAsync(IReadOnlyList<TmdbListItem> items, CancellationToken ct)
     {
         var movieIds = items.Where(i => i.IsMovie).Select(i => i.Id).ToList();
         var tvIds = items.Where(i => !i.IsMovie).Select(i => i.Id).ToList();

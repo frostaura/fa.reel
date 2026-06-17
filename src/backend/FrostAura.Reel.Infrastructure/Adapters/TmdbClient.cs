@@ -55,11 +55,79 @@ public class TmdbClient(
             query += $"&region={region}";
         }
 
-        return await GetListAsync(path + query, movies, ct);
+        return await GetListAsync(path + query, movies, RatePriority.Reconcile, ct);
     }
 
     public Task<IReadOnlyList<TmdbListItem>> GetTrendingAsync(bool movies, CancellationToken ct = default) =>
-        GetListAsync(movies ? "trending/movie/week" : "trending/tv/week", movies, ct);
+        GetListAsync(movies ? "trending/movie/week" : "trending/tv/week", movies, RatePriority.Reconcile, ct);
+
+    public async Task<IReadOnlyList<TmdbKeyword>> SearchKeywordsAsync(string query, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return [];
+        }
+
+        await rateGate.AcquireAsync(RatePriority.Interactive, ct);
+        usageRecorder.Record(ApiProvider.Tmdb);
+
+        using var request = AuthGet($"search/keyword?query={Uri.EscapeDataString(query)}");
+        using var response = await httpClient.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            return [];
+        }
+
+        var dto = await response.Content.ReadFromJsonAsync<KeywordSearchDto>(JsonOptions, ct);
+        return (dto?.Results ?? [])
+            .Where(k => k.Id > 0 && !string.IsNullOrWhiteSpace(k.Name))
+            .Select(k => new TmdbKeyword(k.Id, k.Name!))
+            .ToList();
+    }
+
+    public Task<IReadOnlyList<TmdbListItem>> SearchTitlesAsync(bool movies, string query, int page, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return Task.FromResult<IReadOnlyList<TmdbListItem>>([]);
+        }
+
+        var path = movies ? "search/movie" : "search/tv";
+        var q = $"?query={Uri.EscapeDataString(query)}&include_adult=false&page={page}";
+        return GetListAsync(path + q, movies, RatePriority.Interactive, ct);
+    }
+
+    public Task<IReadOnlyList<TmdbListItem>> DiscoverByConceptAsync(
+        bool movies, IReadOnlyList<int> genreIds, IReadOnlyList<int> keywordIds,
+        string? region, DateTime? releasedAfter, int page, CancellationToken ct = default)
+    {
+        var path = movies ? "discover/movie" : "discover/tv";
+        // vote_count.gte is lower than the feed's discover (50) — concept queries want recall over
+        // the most niche unseen titles, not just the popular ones. Genres + keywords OR-joined.
+        var query = $"?sort_by=popularity.desc&include_adult=false&page={page}&vote_count.gte=10";
+        if (genreIds.Count > 0)
+        {
+            query += $"&with_genres={string.Join('|', genreIds)}";
+        }
+
+        if (keywordIds.Count > 0)
+        {
+            query += $"&with_keywords={string.Join('|', keywordIds)}";
+        }
+
+        if (releasedAfter is { } after)
+        {
+            var dateField = movies ? "primary_release_date" : "first_air_date";
+            query += $"&{dateField}.gte={after:yyyy-MM-dd}";
+        }
+
+        if (movies && region is { Length: 2 })
+        {
+            query += $"&region={region}";
+        }
+
+        return GetListAsync(path + query, movies, RatePriority.Interactive, ct);
+    }
 
     public async Task<IReadOnlyList<TmdbWatchProvider>> GetWatchProvidersAsync(long tmdbId, bool movie, string region, CancellationToken ct = default)
     {
@@ -115,16 +183,12 @@ public class TmdbClient(
         [property: JsonPropertyName("logo_path")] string? LogoPath,
         [property: JsonPropertyName("display_priority")] int DisplayPriority);
 
-    private async Task<IReadOnlyList<TmdbListItem>> GetListAsync(string path, bool movies, CancellationToken ct)
+    private async Task<IReadOnlyList<TmdbListItem>> GetListAsync(string path, bool movies, RatePriority priority, CancellationToken ct)
     {
-        await rateGate.AcquireAsync(RatePriority.Reconcile, ct);
+        await rateGate.AcquireAsync(priority, ct);
         usageRecorder.Record(ApiProvider.Tmdb);
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, path);
-        var token = configuration["TMDB_READ_ACCESS_TOKEN"]
-            ?? throw new InvalidOperationException("TMDB_READ_ACCESS_TOKEN is required.");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
+        using var request = AuthGet(path);
         using var response = await httpClient.SendAsync(request, ct);
         response.EnsureSuccessStatusCode();
         var dto = await response.Content.ReadFromJsonAsync<ListDto>(JsonOptions, ct);
@@ -146,8 +210,21 @@ public class TmdbClient(
             .ToList();
     }
 
+    private HttpRequestMessage AuthGet(string path)
+    {
+        var token = configuration["TMDB_READ_ACCESS_TOKEN"]
+            ?? throw new InvalidOperationException("TMDB_READ_ACCESS_TOKEN is required.");
+        var request = new HttpRequestMessage(HttpMethod.Get, path);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return request;
+    }
+
     private static DateTime? ParseDate(string? value) =>
         DateTime.TryParse(value, out var parsed) ? DateTime.SpecifyKind(parsed, DateTimeKind.Utc) : null;
+
+    private sealed record KeywordSearchDto(KeywordResultDto[]? Results);
+
+    private sealed record KeywordResultDto(int Id, string? Name);
 
     private sealed record ListDto(ListResultDto[]? Results);
 

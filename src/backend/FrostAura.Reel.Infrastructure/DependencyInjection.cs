@@ -89,6 +89,14 @@ public static class DependencyInjection
             client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
         }).AddStandardResilienceHandler();
 
+        services.AddHttpClient<ISearchQueryInterpreter, OpenRouterSearchInterpreter>(client =>
+        {
+            var baseUrl = configuration["OPENROUTER_BASE_URL"] ?? "https://openrouter.ai/api/v1";
+            client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromSeconds(60);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
+        }).AddStandardResilienceHandler();
+
         // ── Shared-work coordination + request caching ───────────────────────────────────
         services.AddMemoryCache();
         services.AddSingleton<Application.Abstractions.ICatalogWorkCoordinator, Concurrency.CatalogWorkCoordinator>();
@@ -102,6 +110,7 @@ public static class DependencyInjection
         // ── Serving pipeline ─────────────────────────────────────────────────────────────
         services.AddScoped<Application.Search.EligibilityQueryBuilder>();
         services.AddScoped<Application.Search.LexicalSearchService>();
+        services.AddScoped<Application.Search.LiveSearchExpansionService>();
         services.AddScoped<Application.Ranking.CandidateGenerator>();
         services.AddScoped<Application.Ingestion.TitleHydrator>();
 
