@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
-import { AlertTriangle, Send, Sparkles } from "lucide-react";
+import { AlertTriangle, Mic, Send, Sparkles } from "lucide-react";
 import PosterImage from "../components/rec/PosterImage";
 import PredictedRatingBadge from "../components/rec/PredictedRatingBadge";
 import BrowseFilters from "../components/rec/BrowseFilters";
 import { DEFAULT_BROWSE_FILTER, matchesMedia } from "../lib/browseFilter";
 import { useAskReelChat } from "../lib/useAskReelChat";
+import { useSpeech } from "../lib/useSpeech";
 import type { PhaseData } from "../lib/askReelStream";
 
 /**
@@ -40,6 +41,7 @@ export default function SearchResults() {
   const [filter, setFilter] = useState(DEFAULT_BROWSE_FILTER);
   const [draft, setDraft] = useState("");
   const { turns, status, phase, cards, reason, send } = useAskReelChat();
+  const speech = useSpeech((text) => send(text, false));
 
   // A search from the header box (?q=) starts a fresh conversation. `send` aborts any in-flight
   // stream and resets on fresh=true, so a dev StrictMode double-invoke simply restarts cleanly.
@@ -174,6 +176,20 @@ export default function SearchResults() {
             placeholder="Ask for more, or refine — “something funnier”, “more like the second one”…"
             className="flex-1 rounded-full bg-fa-frost/10 px-4 py-2 fa-body text-fa-frost-bright placeholder:text-fa-frost-dim/60 focus:outline-none focus:ring-1 focus:ring-fa-frost/40"
           />
+          {speech.supported && (
+            <button
+              type="button"
+              onClick={() => (speech.listening ? speech.stop() : speech.start())}
+              disabled={streaming}
+              aria-label="Voice search"
+              data-testid="askreel-mic"
+              className={`rounded-full p-2.5 transition-colors disabled:opacity-40 ${
+                speech.listening ? "bg-fa-frost/40 text-fa-frost-bright animate-pulse" : "bg-fa-frost/10 text-fa-frost-dim hover:text-fa-frost-bright"
+              }`}
+            >
+              <Mic className="h-4 w-4" />
+            </button>
+          )}
           <button
             type="submit"
             disabled={!draft.trim() || streaming}

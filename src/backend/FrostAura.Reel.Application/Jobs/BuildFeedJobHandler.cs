@@ -194,6 +194,16 @@ public class BuildFeedJobHandler(
             .Take(AnchorRowCount)
             .ToList();
 
+        // Plot-embedding cosine for "because you loved" similarity + hero diversity — far richer
+        // than genre overlap. Falls back to genre Jaccard for any title not yet embedded.
+        var embIds = candidates.Select(c => c.Title.Id).Concat(anchors.Select(a => a.Id)).Distinct().ToList();
+        var embByTitle = (await db.TitleEmbeddings.Where(e => embIds.Contains(e.TitleId)).ToListAsync(ct))
+            .ToDictionary(e => e.TitleId, e => e.Embedding.ToArray());
+        double Similarity(Title a, Title b) =>
+            embByTitle.TryGetValue(a.Id, out var va) && embByTitle.TryGetValue(b.Id, out var vb)
+                ? Cosine(va, vb)
+                : GenreJaccard(a, b);
+
         string WhyThis(Candidate candidate, string? anchorName)
         {
             var best = bestPersonByTitle.GetValueOrDefault(candidate.Title.Id);
@@ -233,7 +243,7 @@ public class BuildFeedJobHandler(
                 break;
             }
 
-            var maxSim = hero.Count == 0 ? 0d : hero.Max(h => GenreJaccard(h.Title, candidate.Title));
+            var maxSim = hero.Count == 0 ? 0d : hero.Max(h => Similarity(h.Title, candidate.Title));
             if (maxSim < 0.8d)
             {
                 hero.Add(candidate);
@@ -292,7 +302,7 @@ public class BuildFeedJobHandler(
         {
             var members = candidates
                 .Where(c => !used.Contains(c.Title.Id) && c.Predicted >= minPredicted)
-                .Select(c => new { Candidate = c, Sim = AnchorSimilarity(anchor, c.Title, credits.Count != 0) })
+                .Select(c => new { Candidate = c, Sim = Similarity(anchor, c.Title) })
                 .Where(x => x.Sim > 0.15d)
                 .OrderByDescending(x => (double)x.Candidate.Predicted * (0.5 + x.Sim))
                 .Take(RowSize)
@@ -326,10 +336,22 @@ public class BuildFeedJobHandler(
         return snapshot;
     }
 
-    private double AnchorSimilarity(Title anchor, Title candidate, bool _)
+    private static double Cosine(float[] a, float[] b)
     {
-        // Genre Jaccard now; embedding cosine joins this blend once vectors exist.
-        return GenreJaccard(anchor, candidate);
+        if (a.Length != b.Length)
+        {
+            return 0d;
+        }
+
+        double dot = 0, na = 0, nb = 0;
+        for (var i = 0; i < a.Length; i++)
+        {
+            dot += a[i] * b[i];
+            na += a[i] * a[i];
+            nb += b[i] * b[i];
+        }
+
+        return na <= 0 || nb <= 0 ? 0d : dot / (Math.Sqrt(na) * Math.Sqrt(nb));
     }
 
     private static double GenreJaccard(Title a, Title b)
