@@ -436,12 +436,16 @@ jobs:
   # ============================================================================
   # Portainer deploy — re-pull image and redeploy the live stack (fa.startup pattern)
   # ============================================================================
+  # DISABLED until the reel Portainer stack exists. Re-enable by setting the
+  # repository variable DEPLOY_ENABLED=true (Settings → Secrets and variables →
+  # Actions → Variables) once PORTAINER_STACK_ID + the stack are in place. While
+  # the variable is unset the job is skipped (not failed), so CI stays green.
   deploy-portainer:
     name: Re-pull image and redeploy on Portainer
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs: [merge-backend-manifests, merge-frontend-manifests]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: vars.DEPLOY_ENABLED == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Wait for Docker Hub image propagation
         run: |
