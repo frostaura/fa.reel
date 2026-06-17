@@ -1,26 +1,39 @@
+import { useState } from "react";
 import { Lock } from "lucide-react";
 import { useGetContinueWatchingQuery, useGetFeedQuery, useGetSessionQuery } from "../store/api";
 import RecCardHero from "../components/rec/RecCardHero";
 import RecRow from "../components/rows/RecRow";
 import ContinueWatchingRow from "../components/rows/ContinueWatchingRow";
+import BrowseFilters from "../components/rec/BrowseFilters";
+import { DEFAULT_BROWSE_FILTER, matchesBrowseFilter, matchesMedia } from "../lib/browseFilter";
 
 /** The hybrid home: tonight's-picks hero answering one question, rows below for grazing. */
 export default function Home() {
   const { data: session } = useGetSessionQuery();
   const { data: feed, isLoading } = useGetFeedQuery();
   const { data: continueWatching } = useGetContinueWatchingQuery();
+  const [filter, setFilter] = useState(DEFAULT_BROWSE_FILTER);
 
   const building = session != null && session.pipelineStage !== "FeedReady" && (feed?.hero.length ?? 0) === 0;
 
+  const hero = (feed?.hero ?? []).filter((c) => matchesBrowseFilter(c, filter));
+  const rows = (feed?.rows ?? [])
+    .map((row) => ({ ...row, items: row.items.filter((c) => matchesBrowseFilter(c, filter)) }))
+    .filter((row) => row.items.length > 0);
+  const continueFiltered = (continueWatching ?? []).filter((e) => matchesMedia(e.mediaType, filter));
+
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-light text-fa-frost-bright">Tonight&apos;s picks</h1>
-        {feed?.generatedAt && (
-          <p className="fa-caption text-fa-frost-dim mt-1">
-            ranked for you · {new Date(feed.generatedAt).toLocaleString()}
-          </p>
-        )}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-light text-fa-frost-bright">Tonight&apos;s picks</h1>
+          {feed?.generatedAt && (
+            <p className="fa-caption text-fa-frost-dim mt-1">
+              ranked for you · {new Date(feed.generatedAt).toLocaleString()}
+            </p>
+          )}
+        </div>
+        {!building && (feed?.hero.length ?? 0) > 0 && <BrowseFilters value={filter} onChange={setFilter} />}
       </div>
 
       {isLoading || building ? (
@@ -39,11 +52,15 @@ export default function Home() {
         </div>
       ) : (
         <>
-          <RecCardHero cards={feed?.hero ?? []} />
+          {hero.length === 0 ? (
+            <p className="fa-body text-fa-frost-dim text-center py-8">Nothing matches this filter — try widening it.</p>
+          ) : (
+            <RecCardHero cards={hero} />
+          )}
 
-          <ContinueWatchingRow entries={continueWatching ?? []} />
+          <ContinueWatchingRow entries={continueFiltered} />
 
-          {feed?.rows.map((row) => (
+          {rows.map((row) => (
             <RecRow
               key={row.anchorTitleId}
               title={

@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { AlertTriangle, Sparkles } from "lucide-react";
 import { useSearchSemanticQuery } from "../store/api";
 import PosterImage from "../components/rec/PosterImage";
 import PredictedRatingBadge from "../components/rec/PredictedRatingBadge";
+import BrowseFilters from "../components/rec/BrowseFilters";
+import { DEFAULT_BROWSE_FILTER, matchesMedia } from "../lib/browseFilter";
 
 /**
  * The "Ask Reel" results surface. Semantic (embedding-ranked) when the OpenAI key is
@@ -14,21 +17,25 @@ export default function SearchResults() {
   const query = params.get("q") ?? "";
   const location = useLocation();
   const { data, isFetching, isError, refetch } = useSearchSemanticQuery(query, { skip: query.length === 0 });
+  const [filter, setFilter] = useState(DEFAULT_BROWSE_FILTER);
 
-  const results = data?.results ?? [];
+  const results = (data?.results ?? []).filter((r) => matchesMedia(r.mediaType, filter));
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-light text-fa-frost-bright flex items-center gap-2">
-          <Sparkles className="h-5 w-5 text-fa-frost" /> Ask Reel
-        </h1>
-        <p className="fa-caption text-fa-frost-dim mt-1">
-          “{query}”
-          {data?.mode === "lexical" && results.length > 0 && (
-            <span className="ml-2 text-fa-frost-dim/80">· matched on concepts &amp; keywords</span>
-          )}
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-light text-fa-frost-bright flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-fa-frost" /> Ask Reel
+          </h1>
+          <p className="fa-caption text-fa-frost-dim mt-1">
+            “{query}”
+            {data?.mode === "lexical" && results.length > 0 && (
+              <span className="ml-2 text-fa-frost-dim/80">· matched on concepts &amp; keywords</span>
+            )}
+          </p>
+        </div>
+        {(data?.results.length ?? 0) > 0 && <BrowseFilters value={filter} onChange={setFilter} showAvailability={false} />}
       </div>
 
       {isFetching ? (

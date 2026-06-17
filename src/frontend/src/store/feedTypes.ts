@@ -11,6 +11,7 @@ export interface FeedCard {
   genres: string[];
   predictedRating: number;
   whyThis: string;
+  isReleased: boolean;
 }
 
 export interface FeedRow {

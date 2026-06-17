@@ -14,7 +14,7 @@ public static class FeedEndpoints
     public record FeedCard(
         Guid TitleId, string MediaType, long? TmdbId, string Name, int? Year, int? RuntimeMinutes,
         string? PosterPath, string? BackdropPath, string[] Genres,
-        decimal PredictedRating, string WhyThis);
+        decimal PredictedRating, string WhyThis, bool IsReleased);
 
     public static void MapFeedEndpoints(this IEndpointRouteBuilder app)
     {
@@ -42,10 +42,16 @@ public static class FeedEndpoints
                 .OrderBy(x => x.Item.Row).ThenBy(x => x.Item.Rank)
                 .ToListAsync(ct);
 
-            FeedCard ToCard(FeedItem item, Title title) => new(
-                title.Id, title.MediaType.ToString(), title.TmdbId, title.Name, title.Year, title.RuntimeMinutes,
-                title.PosterPath, title.BackdropPath, title.Genres,
-                item.PredictedRating, item.WhyThisSentence);
+            var nowUtc = DateTime.UtcNow;
+            FeedCard ToCard(FeedItem item, Title title)
+            {
+                var releaseDate = title.MediaType == MediaType.Movie ? title.ReleasedAt : title.FirstAiredAt;
+                var isReleased = releaseDate is null || releaseDate <= nowUtc;
+                return new(
+                    title.Id, title.MediaType.ToString(), title.TmdbId, title.Name, title.Year, title.RuntimeMinutes,
+                    title.PosterPath, title.BackdropPath, title.Genres,
+                    item.PredictedRating, item.WhyThisSentence, isReleased);
+            }
 
             var hero = items.Where(x => x.Item.Row == FeedRowKind.Hero)
                 .Select(x => ToCard(x.Item, x.Title))
