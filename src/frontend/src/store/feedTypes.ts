@@ -12,6 +12,7 @@ export interface FeedCard {
   predictedRating: number;
   whyThis: string;
   isReleased: boolean;
+  providers?: { name: string; logoPath: string | null }[];
 }
 
 export interface FeedRow {

@@ -11,10 +11,12 @@ namespace FrostAura.Reel.Api.Endpoints;
 
 public static class FeedEndpoints
 {
+    public record CardProvider(string Name, string? LogoPath);
+
     public record FeedCard(
         Guid TitleId, string MediaType, long? TmdbId, string Name, int? Year, int? RuntimeMinutes,
         string? PosterPath, string? BackdropPath, string[] Genres,
-        decimal PredictedRating, string WhyThis, bool IsReleased);
+        decimal PredictedRating, string WhyThis, bool IsReleased, IReadOnlyList<CardProvider> Providers);
 
     public static void MapFeedEndpoints(this IEndpointRouteBuilder app)
     {
@@ -43,6 +45,22 @@ public static class FeedEndpoints
                 .ToListAsync(ct);
 
             var nowUtc = DateTime.UtcNow;
+
+            // Best-effort streaming strips from the shared availability cache (populated as titles
+            // are viewed; no extra TMDB calls here). Stream/flatrate providers only, top 3 by priority.
+            var feedTitleIds = items.Select(x => x.Title.Id).ToList();
+            var availCutoff = nowUtc.AddDays(-7);
+            var providersByTitle = (await db.TitleAvailabilities
+                    .Where(a => feedTitleIds.Contains(a.TitleId) && a.Region == account.Region
+                        && a.Kind == Domain.Providers.AvailabilityKind.Flatrate && a.FetchedAt > availCutoff)
+                    .Join(db.StreamingProviders, a => a.ProviderId, p => p.Id, (a, p) => new { a.TitleId, p.Name, p.LogoPath, p.DisplayPriority })
+                    .ToListAsync(ct))
+                .GroupBy(x => x.TitleId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => (IReadOnlyList<CardProvider>)g.DistinctBy(x => x.Name).OrderBy(x => x.DisplayPriority)
+                        .Take(3).Select(x => new CardProvider(x.Name, x.LogoPath)).ToList());
+
             FeedCard ToCard(FeedItem item, Title title)
             {
                 var releaseDate = title.MediaType == MediaType.Movie ? title.ReleasedAt : title.FirstAiredAt;
@@ -50,7 +68,8 @@ public static class FeedEndpoints
                 return new(
                     title.Id, title.MediaType.ToString(), title.TmdbId, title.Name, title.Year, title.RuntimeMinutes,
                     title.PosterPath, title.BackdropPath, title.Genres,
-                    item.PredictedRating, item.WhyThisSentence, isReleased);
+                    item.PredictedRating, item.WhyThisSentence, isReleased,
+                    providersByTitle.GetValueOrDefault(title.Id, []));
             }
 
             var hero = items.Where(x => x.Item.Row == FeedRowKind.Hero)

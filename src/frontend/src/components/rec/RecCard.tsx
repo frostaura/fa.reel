@@ -2,6 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import type { FeedCard } from "../../store/feedTypes";
 import PosterImage from "./PosterImage";
 import PredictedRatingBadge from "./PredictedRatingBadge";
+import { logoUrl } from "../../lib/tmdbImages";
 import { formatRuntime } from "../../lib/format";
 
 /** Collapsed recommendation card: poster · meta line · why-this · predicted rating. */
@@ -20,6 +21,15 @@ export default function RecCard({ card }: { card: FeedCard }) {
         <div className="absolute top-2 right-2">
           <PredictedRatingBadge rating={card.predictedRating} />
         </div>
+        {(card.providers?.length ?? 0) > 0 && (
+          <div className="absolute bottom-2 left-2 flex gap-1" data-testid="card-providers">
+            {card.providers!.slice(0, 3).map((p) =>
+              logoUrl(p.logoPath) ? (
+                <img key={p.name} src={logoUrl(p.logoPath)!} alt={p.name} title={p.name} className="h-5 w-5 rounded-[4px] ring-1 ring-black/30" loading="lazy" />
+              ) : null,
+            )}
+          </div>
+        )}
       </div>
       <div className="mt-2 space-y-1">
         <p className="fa-body font-medium text-fa-frost-bright truncate" title={card.name}>
