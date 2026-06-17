@@ -39,6 +39,8 @@ public interface IReelDbContext
     DbSet<UserTitleReaction> UserTitleReactions { get; }
     DbSet<ContentFilter> ContentFilters { get; }
     DbSet<UserPreferenceTag> UserPreferenceTags { get; }
+    DbSet<Domain.Search.SearchConversation> SearchConversations { get; }
+    DbSet<Domain.Search.SearchTurn> SearchTurns { get; }
 
     DbSet<PersonAffinity> PersonAffinities { get; }
     DbSet<AccountTasteProfile> AccountTasteProfiles { get; }

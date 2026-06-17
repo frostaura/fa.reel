@@ -40,14 +40,28 @@ export default function SearchResults() {
   const location = useLocation();
   const [filter, setFilter] = useState(DEFAULT_BROWSE_FILTER);
   const [draft, setDraft] = useState("");
-  const { turns, status, phase, cards, reason, send } = useAskReelChat();
+  const { turns, status, phase, cards, reason, send, resume } = useAskReelChat();
   const speech = useSpeech((text) => send(text, false));
 
-  // A search from the header box (?q=) starts a fresh conversation. `send` aborts any in-flight
-  // stream and resets on fresh=true, so a dev StrictMode double-invoke simply restarts cleanly.
+  // A search from the header box (?q=) starts a fresh conversation; landing on /search with no
+  // query resumes the most recent conversation (durable across reloads). `send` aborts any
+  // in-flight stream and resets on fresh=true, so a dev StrictMode double-invoke restarts cleanly.
   useEffect(() => {
-    if (seed) send(seed, true);
-  }, [seed, send]);
+    if (seed) {
+      send(seed, true);
+      return;
+    }
+    let cancelled = false;
+    fetch("/api/search/conversations/latest", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && d?.id && d.turns?.length) resume(d.turns, d.id);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [seed, send, resume]);
 
   const visible = cards.filter((c) => matchesMedia(c.mediaType, filter));
   const streaming = status === "streaming";

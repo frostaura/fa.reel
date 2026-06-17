@@ -179,9 +179,16 @@ public static class SearchEndpoints
             var region = await db.Accounts.Where(a => a.Id == accountId).Select(a => a.Region).FirstOrDefaultAsync(ct);
             var jsonOptions = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web);
 
+            string? assistantText = null;
             LiveSearchExpansionService.Emit emit = async (eventName, payload) =>
             {
                 var json = System.Text.Json.JsonSerializer.Serialize(payload, jsonOptions);
+                if (eventName == "assistant-message")
+                {
+                    try { assistantText = System.Text.Json.JsonDocument.Parse(json).RootElement.GetProperty("text").GetString(); }
+                    catch { /* non-fatal */ }
+                }
+
                 await http.Response.WriteAsync($"event: {eventName}\ndata: {json}\n\n", ct);
                 await http.Response.Body.FlushAsync(ct);
             };
@@ -191,17 +198,87 @@ public static class SearchEndpoints
                 .Select(t => new Domain.Ports.ChatTurn(t.Role ?? "user", t.Text!))
                 .ToList();
             var shown = request.ShownTmdbIds ?? [];
+            var message = request.Query ?? string.Empty;
+
+            // Persist the turn so the conversation survives a reload (resume on the /search page).
+            var now = DateTime.UtcNow;
+            var conversation = request.ConversationId is { } cid
+                ? await db.SearchConversations.FirstOrDefaultAsync(c => c.Id == cid && c.AccountId == accountId, ct)
+                : null;
+            if (conversation is null && message.Trim().Length > 0)
+            {
+                conversation = new Domain.Search.SearchConversation
+                {
+                    Id = Guid.NewGuid(),
+                    AccountId = accountId,
+                    Title = message.Trim().Length > 80 ? message.Trim()[..80] : message.Trim(),
+                    CreatedAt = now,
+                    LastTurnAt = now,
+                };
+                db.SearchConversations.Add(conversation);
+            }
+
+            if (conversation is not null)
+            {
+                conversation.LastTurnAt = now;
+                db.SearchTurns.Add(new Domain.Search.SearchTurn
+                {
+                    Id = Guid.NewGuid(),
+                    AccountId = accountId,
+                    ConversationId = conversation.Id,
+                    Role = "user",
+                    Text = message,
+                    CreatedAt = now,
+                });
+                await db.SaveChangesAsync(ct);
+                await emit("conversation", new { id = conversation.Id });
+            }
 
             try
             {
-                await expansion.StreamAsync(request.Query ?? string.Empty, history, shown, region, emit, ct);
+                await expansion.StreamAsync(message, history, shown, region, emit, ct);
             }
             catch (OperationCanceledException)
             {
                 // client navigated away mid-stream — normal teardown
             }
 
+            if (conversation is not null && assistantText is { Length: > 0 })
+            {
+                db.SearchTurns.Add(new Domain.Search.SearchTurn
+                {
+                    Id = Guid.NewGuid(),
+                    AccountId = accountId,
+                    ConversationId = conversation.Id,
+                    Role = "assistant",
+                    Text = assistantText,
+                    CreatedAt = DateTime.UtcNow,
+                });
+                await db.SaveChangesAsync(CancellationToken.None);
+            }
+
             return Results.Empty;
+        });
+
+        // Resume: the most-recent conversation's transcript (newest convo, turns oldest→newest).
+        group.MapGet("/conversations/latest", async (IReelDbContext db, IAccountContext accountContext, CancellationToken ct) =>
+        {
+            var accountId = accountContext.AccountId!.Value;
+            var convo = await db.SearchConversations
+                .Where(c => c.AccountId == accountId)
+                .OrderByDescending(c => c.LastTurnAt)
+                .FirstOrDefaultAsync(ct);
+            if (convo is null)
+            {
+                return Results.Ok(new { id = (Guid?)null, turns = Array.Empty<object>() });
+            }
+
+            var turns = await db.SearchTurns
+                .Where(t => t.ConversationId == convo.Id)
+                .OrderBy(t => t.CreatedAt)
+                .Select(t => new { role = t.Role, text = t.Text })
+                .ToListAsync(ct);
+            return Results.Ok(new { id = convo.Id, title = convo.Title, turns });
         });
     }
 
@@ -209,7 +286,7 @@ public static class SearchEndpoints
 
     public record AskTurn(string? Role, string? Text);
 
-    public record AskRequest(string Query, List<AskTurn>? History, List<long>? ShownTmdbIds);
+    public record AskRequest(string Query, List<AskTurn>? History, List<long>? ShownTmdbIds, Guid? ConversationId);
 
     /// <summary>The account's MinPredictedRating floor (0 = off) — recommendation surfaces only.</summary>
     public static async Task<decimal> MinPredictedFloorAsync(IReelDbContext db, Guid accountId, CancellationToken ct)

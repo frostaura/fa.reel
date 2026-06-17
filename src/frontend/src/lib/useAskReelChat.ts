@@ -16,11 +16,14 @@ interface State {
   order: string[];
   reason: string | null;
   shown: number[]; // tmdbIds surfaced across the whole conversation (no-repeat)
+  conversationId: string | null;
 }
 
 type Action =
   | { type: "userTurn"; message: string; fresh: boolean }
   | { type: "phase"; data: PhaseData }
+  | { type: "conversation"; data: { id: string } }
+  | { type: "resume"; turns: ChatTurn[]; conversationId: string }
   | { type: "assistant"; data: { text: string } }
   | { type: "candidate"; data: AskCard }
   | { type: "scored"; data: { titleId: string; predictedRating: number | null } }
@@ -28,18 +31,22 @@ type Action =
   | { type: "done"; data: { results: AskCard[]; reason: string | null } }
   | { type: "error" };
 
-const initial: State = { turns: [], status: "idle", phase: null, byId: {}, order: [], reason: null, shown: [] };
+const initial: State = { turns: [], status: "idle", phase: null, byId: {}, order: [], reason: null, shown: [], conversationId: null };
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
     case "userTurn": {
       const turn: ChatTurn = { role: "user", text: action.message };
       return action.fresh
-        ? { turns: [turn], status: "streaming", phase: null, byId: {}, order: [], reason: null, shown: [] }
+        ? { ...initial, turns: [turn], status: "streaming" }
         : { ...state, turns: [...state.turns, turn], status: "streaming", phase: null, byId: {}, order: [], reason: null };
     }
     case "phase":
       return { ...state, status: "streaming", phase: action.data };
+    case "conversation":
+      return { ...state, conversationId: action.data.id };
+    case "resume":
+      return { ...initial, turns: action.turns, conversationId: action.conversationId, status: "done" };
     case "assistant":
       return { ...state, turns: [...state.turns, { role: "assistant", text: action.data.text }] };
     case "candidate": {
@@ -96,11 +103,13 @@ export function useAskReelChat() {
 
     const history = fresh ? [] : stateRef.current.turns.map((t) => ({ role: t.role, text: t.text }));
     const shownTmdbIds = fresh ? [] : [...stateRef.current.shown];
+    const conversationId = fresh ? null : stateRef.current.conversationId;
     dispatch({ type: "userTurn", message: msg, fresh });
 
-    streamAskReel({ query: msg, history, shownTmdbIds }, (ev) => {
+    streamAskReel({ query: msg, history, shownTmdbIds, conversationId }, (ev) => {
       switch (ev.event) {
         case "phase": dispatch({ type: "phase", data: ev.data }); break;
+        case "conversation": dispatch({ type: "conversation", data: ev.data }); break;
         case "assistant-message": dispatch({ type: "assistant", data: ev.data }); break;
         case "candidate": dispatch({ type: "candidate", data: ev.data }); break;
         case "candidate-scored": dispatch({ type: "scored", data: ev.data }); break;
@@ -114,8 +123,12 @@ export function useAskReelChat() {
     });
   }, []);
 
+  const resume = useCallback((turns: ChatTurn[], conversationId: string) => {
+    if (turns.length > 0) dispatch({ type: "resume", turns, conversationId });
+  }, []);
+
   useEffect(() => () => abortRef.current?.abort(), []);
 
   const cards = state.order.map((id) => state.byId[id]).filter(Boolean).sort((a, b) => blend(b) - blend(a));
-  return { turns: state.turns, status: state.status, phase: state.phase, cards, reason: state.reason, send };
+  return { turns: state.turns, status: state.status, phase: state.phase, cards, reason: state.reason, send, resume };
 }

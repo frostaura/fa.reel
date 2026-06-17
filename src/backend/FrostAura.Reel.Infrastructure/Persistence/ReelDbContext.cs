@@ -49,6 +49,10 @@ public class ReelDbContext(DbContextOptions<ReelDbContext> options, IAccountCont
     public DbSet<UserPersonRating> UserPersonRatings => Set<UserPersonRating>();
 
     public DbSet<UserPreferenceTag> UserPreferenceTags => Set<UserPreferenceTag>();
+
+    public DbSet<Domain.Search.SearchConversation> SearchConversations => Set<Domain.Search.SearchConversation>();
+
+    public DbSet<Domain.Search.SearchTurn> SearchTurns => Set<Domain.Search.SearchTurn>();
     public DbSet<UserTitleReaction> UserTitleReactions => Set<UserTitleReaction>();
     public DbSet<ContentFilter> ContentFilters => Set<ContentFilter>();
 
@@ -197,6 +201,9 @@ public class ReelDbContext(DbContextOptions<ReelDbContext> options, IAccountCont
             e.HasIndex(t => new { t.AccountId, t.Text }).IsUnique();
             e.Property(t => t.Embedding).HasColumnType("vector(1536)");
         });
+
+        modelBuilder.Entity<Domain.Search.SearchConversation>(e => e.HasIndex(c => new { c.AccountId, c.LastTurnAt }));
+        modelBuilder.Entity<Domain.Search.SearchTurn>(e => e.HasIndex(t => new { t.ConversationId, t.CreatedAt }));
 
         // ── ML ─────────────────────────────────────────────────────────────────────────────
         modelBuilder.Entity<PersonAffinity>(e => e.HasIndex(a => new { a.AccountId, a.PersonId, a.Role }).IsUnique());

@@ -32,6 +32,7 @@ export interface DoneData {
 
 export type AskEvent =
   | { event: "phase"; data: PhaseData }
+  | { event: "conversation"; data: { id: string } }
   | { event: "candidate"; data: AskCard }
   | { event: "candidate-scored"; data: { titleId: string; predictedRating: number | null } }
   | { event: "candidate-reranked"; data: { titleId: string; fit: number | null; why: string | null } }
@@ -42,6 +43,7 @@ export interface AskReelRequest {
   query: string;
   history?: { role: string; text: string }[];
   shownTmdbIds?: number[];
+  conversationId?: string | null;
 }
 
 /** Streams /api/search/ask, invoking onEvent per parsed SSE frame. Resolves when the stream ends. */
