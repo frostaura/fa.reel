@@ -47,6 +47,8 @@ public class ReelDbContext(DbContextOptions<ReelDbContext> options, IAccountCont
     public DbSet<ShowWatchProgress> ShowWatchProgresses => Set<ShowWatchProgress>();
     public DbSet<UserRating> UserRatings => Set<UserRating>();
     public DbSet<UserPersonRating> UserPersonRatings => Set<UserPersonRating>();
+
+    public DbSet<UserPreferenceTag> UserPreferenceTags => Set<UserPreferenceTag>();
     public DbSet<UserTitleReaction> UserTitleReactions => Set<UserTitleReaction>();
     public DbSet<ContentFilter> ContentFilters => Set<ContentFilter>();
 
@@ -189,6 +191,12 @@ public class ReelDbContext(DbContextOptions<ReelDbContext> options, IAccountCont
         });
 
         modelBuilder.Entity<ContentFilter>(e => e.HasIndex(f => new { f.AccountId, f.Kind, f.Value }).IsUnique());
+
+        modelBuilder.Entity<UserPreferenceTag>(e =>
+        {
+            e.HasIndex(t => new { t.AccountId, t.Text }).IsUnique();
+            e.Property(t => t.Embedding).HasColumnType("vector(1536)");
+        });
 
         // ── ML ─────────────────────────────────────────────────────────────────────────────
         modelBuilder.Entity<PersonAffinity>(e => e.HasIndex(a => new { a.AccountId, a.PersonId, a.Role }).IsUnique());

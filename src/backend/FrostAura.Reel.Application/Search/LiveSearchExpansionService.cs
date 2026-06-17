@@ -114,6 +114,7 @@ public sealed class LiveSearchExpansionService(
             await emit("phase", new { stage = "embedding", found = eligible.Count, scored = 0 });
             await EnsureEmbeddedAsync(eligible, ct);
             var vectorsByTitle = await LoadVectorsAsync(eligible.Select(t => t.Id).ToList(), ct);
+            var tagVectors = await LoadPreferenceTagVectorsAsync(accountId, ct);
             var queryVec = (await embeddings.EmbedAsync([trimmed], ct))[0];
             var ranked = eligible
                 .Where(t => vectorsByTitle.ContainsKey(t.Id))
@@ -147,7 +148,8 @@ public sealed class LiveSearchExpansionService(
                 {
                     var predicted = scores.TryGetValue(x.Title.Id, out var p) ? (decimal?)p : null;
                     var fit = fitById.TryGetValue(x.Title.Id, out var fr) ? fr : null;
-                    var blend = (x.Sim * 0.35) + ((double)(predicted ?? 6m) / 10d * 0.25) + ((fit?.Fit ?? 0.5d) * 0.40);
+                    var tagBoost = vectorsByTitle.TryGetValue(x.Title.Id, out var vec) ? TagAffinity(vec, tagVectors) : 0d;
+                    var blend = (x.Sim * 0.32) + ((double)(predicted ?? 6m) / 10d * 0.23) + ((fit?.Fit ?? 0.5d) * 0.35) + (tagBoost * 0.10);
                     return (x.Title, x.Sim, predicted, Fit: fit, Blend: blend);
                 })
                 .OrderByDescending(x => x.Blend)
@@ -367,6 +369,28 @@ public sealed class LiveSearchExpansionService(
     {
         var rows = await db.TitleEmbeddings.Where(e => ids.Contains(e.TitleId)).ToListAsync(ct);
         return rows.ToDictionary(e => e.TitleId, e => e.Embedding.ToArray());
+    }
+
+    /// <summary>The account's embedded preference-tag vectors — for the positive ranking boost.</summary>
+    private async Task<List<float[]>> LoadPreferenceTagVectorsAsync(Guid accountId, CancellationToken ct)
+    {
+        var rows = await db.UserPreferenceTags
+            .Where(t => t.AccountId == accountId && t.Embedding != null)
+            .Select(t => t.Embedding!)
+            .ToListAsync(ct);
+        return rows.Select(v => v.ToArray()).ToList();
+    }
+
+    /// <summary>Max cosine of a title to any of the user's preference tags (0 when there are none).</summary>
+    private static double TagAffinity(float[] titleVec, IReadOnlyList<float[]> tagVecs)
+    {
+        var best = 0d;
+        foreach (var tag in tagVecs)
+        {
+            best = Math.Max(best, Cosine(titleVec, tag));
+        }
+
+        return best;
     }
 
     /// <summary>A compact taste line for the agent prompts — top genres + a few loved titles.</summary>

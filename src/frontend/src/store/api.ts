@@ -194,7 +194,7 @@ const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQue
 export const api = createApi({
   reducerPath: "reelApi",
   baseQuery: baseQueryWithReauth,
-  tagTypes: ["Session", "Sync", "Feed", "TasteDna", "Lab", "Title", "Saved", "Prefs", "Person"],
+  tagTypes: ["Session", "Sync", "Feed", "TasteDna", "Lab", "Title", "Saved", "Prefs", "Person", "PrefTags"],
   endpoints: (b) => ({
     getSession: b.query<Session, void>({
       query: () => "auth/me",
@@ -442,6 +442,18 @@ export const api = createApi({
       query: () => ({ url: "metrics/model/train", method: "POST" }),
       invalidatesTags: ["Lab", "Sync"],
     }),
+    getPreferenceTags: b.query<{ id: string; text: string }[], void>({
+      query: () => "preferences/tags",
+      providesTags: ["PrefTags"],
+    }),
+    addPreferenceTag: b.mutation<{ id: string; text: string }, string>({
+      query: (text) => ({ url: "preferences/tags", method: "POST", body: { text } }),
+      invalidatesTags: ["PrefTags", "Feed"],
+    }),
+    removePreferenceTag: b.mutation<void, string>({
+      query: (id) => ({ url: `preferences/tags/${id}`, method: "DELETE" }),
+      invalidatesTags: ["PrefTags", "Feed"],
+    }),
   }),
 });
 
@@ -476,6 +488,9 @@ export const {
   useSearchSemanticQuery,
   useGetFiltersQuery,
   useUpdateFiltersMutation,
+  useGetPreferenceTagsQuery,
+  useAddPreferenceTagMutation,
+  useRemovePreferenceTagMutation,
   useSetPinMutation,
   useVerifyPinMutation,
   useRemovePinMutation,
