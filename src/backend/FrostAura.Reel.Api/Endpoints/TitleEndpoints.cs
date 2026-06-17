@@ -93,8 +93,8 @@ public static class TitleEndpoints
                 backdropPath = title.BackdropPath,
                 trailerUrl = title.TrailerUrl,
                 cast = cast.Where(c => c.role == "Actor").OrderBy(c => c.castOrder).Take(10),
-                directors = cast.Where(c => c.role == "Director").Select(c => new { c.personId, c.name }),
-                writers = cast.Where(c => c.role == "Writer").Select(c => new { c.personId, c.name }).Take(4),
+                directors = cast.Where(c => c.role == "Director").Select(c => new { c.personId, c.name, c.profilePath, c.userRating }),
+                writers = cast.Where(c => c.role == "Writer").Select(c => new { c.personId, c.name, c.profilePath, c.userRating }).Take(4),
                 prediction = score is null ? null : new
                 {
                     predictedRating = score.PredictedRating,

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Bookmark, BookmarkCheck, Eye, EyeOff, Play, Undo2, X } from "lucide-react";
 import {
   useGetTitleQuery,
@@ -16,6 +16,7 @@ import PosterImage from "../components/rec/PosterImage";
 import PredictedRatingBadge from "../components/rec/PredictedRatingBadge";
 import WhereToWatch from "../components/title/WhereToWatch";
 import CastMemberCard from "../components/title/CastMemberCard";
+import type { CreditPerson } from "../store/titleTypes";
 import { formatRuntime } from "../lib/format";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
 import {
@@ -25,17 +26,18 @@ import {
   DropdownMenuTrigger,
 } from "../components/ui/dropdown-menu";
 
-/** Comma-separated crew names, each linking to the actor/person page. */
-function PersonLinks({ people }: { people: { personId: string; name: string }[] }) {
+/** A labelled row of person chips (Director / Writers / Cast) — each a clickable, rateable avatar. */
+function CreditRow({ label, people }: { label: string; people: CreditPerson[] }) {
+  if (people.length === 0) return null;
   return (
-    <span className="text-fa-frost">
-      {people.map((p, i) => (
-        <span key={p.personId}>
-          {i > 0 && ", "}
-          <Link to={`/person/${p.personId}`} className="hover:text-fa-frost-bright">{p.name}</Link>
-        </span>
-      ))}
-    </span>
+    <div className="space-y-2">
+      <p className="fa-overline text-fa-frost-dim">{label}</p>
+      <div className="flex gap-3 overflow-x-auto pb-2 [scrollbar-width:thin]">
+        {people.map((p) => (
+          <CastMemberCard key={p.personId} member={p} />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -286,26 +288,12 @@ export default function TitleDetail() {
                 </section>
               )}
 
-              {/* Credits */}
+              {/* Credits — director, writers and cast as labelled, clickable, rateable photos */}
               {(title.directors.length > 0 || title.writers.length > 0 || title.cast.length > 0) && (
-                <section className="space-y-3">
-                  {title.directors.length > 0 && (
-                    <p className="fa-caption text-fa-frost-dim">
-                      Directed by <PersonLinks people={title.directors} />
-                    </p>
-                  )}
-                  {title.writers.length > 0 && (
-                    <p className="fa-caption text-fa-frost-dim">
-                      Written by <PersonLinks people={title.writers} />
-                    </p>
-                  )}
-                  {title.cast.length > 0 && (
-                    <div className="flex gap-3 overflow-x-auto pb-2 [scrollbar-width:thin]">
-                      {title.cast.map((member) => (
-                        <CastMemberCard key={member.personId} member={member} />
-                      ))}
-                    </div>
-                  )}
+                <section className="space-y-4">
+                  <CreditRow label={title.directors.length === 1 ? "Director" : "Directors"} people={title.directors} />
+                  <CreditRow label="Writers" people={title.writers} />
+                  <CreditRow label="Cast" people={title.cast} />
                 </section>
               )}
 

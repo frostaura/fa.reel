@@ -1,12 +1,16 @@
-/** Title detail payload (mirrors TitleEndpoints). */
-export interface CastMember {
+/** A clickable, rateable person chip — cast or crew. */
+export interface CreditPerson {
   personId: string;
   name: string;
-  role: string;
-  character: string | null;
-  castOrder: number | null;
   profilePath: string | null;
   userRating: number | null;
+  character?: string | null;
+}
+
+/** Title detail payload (mirrors TitleEndpoints). */
+export interface CastMember extends CreditPerson {
+  role: string;
+  castOrder: number | null;
 }
 
 /** Actor page payload (mirrors PersonEndpoints GET). */
@@ -49,8 +53,8 @@ export interface TitleDetailPayload {
   backdropPath: string | null;
   trailerUrl: string | null;
   cast: CastMember[];
-  directors: { personId: string; name: string }[];
-  writers: { personId: string; name: string }[];
+  directors: CreditPerson[];
+  writers: CreditPerson[];
   prediction: {
     predictedRating: number;
     contributions: { feature: string; value: number }[];
