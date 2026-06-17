@@ -51,10 +51,15 @@ services:
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-5.4-mini}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
       OPENROUTER_MAX_CONCURRENCY: ${OPENROUTER_MAX_CONCURRENCY:-4}
-      # Embeddings
+      # Embeddings — base URL is load-bearing: OpenRouter serves text-embedding-3-small, so the
+      # provider must point there (with OPENROUTER_API_KEY), not the api.openai.com default.
       EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-openai}
       EMBEDDINGS_MODEL: ${EMBEDDINGS_MODEL:-text-embedding-3-small}
       EMBEDDINGS_DIMENSIONS: ${EMBEDDINGS_DIMENSIONS:-1536}
+      EMBEDDINGS_BASE_URL: ${EMBEDDINGS_BASE_URL:-https://openrouter.ai/api/v1}
+      EMBEDDINGS_API_KEY: ${EMBEDDINGS_API_KEY:-}
+      # Conversational search model (defaults to OPENROUTER_MODEL)
+      REEL_SEARCH_MODEL: ${REEL_SEARCH_MODEL:-}
       # Sync cadence
       SYNC_DELTA_MINUTES: ${SYNC_DELTA_MINUTES:-15}
       SYNC_HOT_MINUTES: ${SYNC_HOT_MINUTES:-5}
