@@ -21,6 +21,12 @@ public interface ITmdbClient
     /// <summary>This week's trending titles (movie or tv).</summary>
     Task<IReadOnlyList<TmdbListItem>> GetTrendingAsync(bool movies, CancellationToken ct = default);
 
+    /// <summary>
+    /// TMDB's collaborative recommendations for a title ("people who liked this also liked…") —
+    /// real collaborative signal available from day one, without needing our own cross-tenant data.
+    /// </summary>
+    Task<IReadOnlyList<TmdbListItem>> GetRecommendationsAsync(bool movies, long tmdbId, CancellationToken ct = default);
+
     /// <summary>Resolve free-text keyword names to TMDB keyword ids (/search/keyword). Interactive priority — drives live Ask Reel.</summary>
     Task<IReadOnlyList<TmdbKeyword>> SearchKeywordsAsync(string query, CancellationToken ct = default);
 

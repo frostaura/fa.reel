@@ -20,6 +20,7 @@ public class CandidateGenerator(
     ILogger<CandidateGenerator> logger)
 {
     private const int TopGenreCount = 4;
+    private const int RecommendationSeeds = 5;
 
     public async Task<int> RefreshPoolAsync(FeatureVectorBuilder.TasteState taste, string region, CancellationToken ct)
     {
@@ -58,6 +59,19 @@ public class CandidateGenerator(
         batches.Add(await tmdb.GetTrendingAsync(movies: true, ct));
         batches.Add(await tmdb.GetTrendingAsync(movies: false, ct));
         batches.Add(await tmdb.DiscoverAsync(movies: true, genreId: null, region, DateTime.UtcNow.AddDays(-90), page: 1, ct));
+
+        // Collaborative signal: TMDB recommendations for the user's most-loved titles — "people
+        // who liked your favourites also liked these". Real CF from day one, no cross-tenant data
+        // needed (our own matrix-factorisation CF waits until we have ~200 tenants to be non-noise).
+        var lovedTitles = await db.Titles
+            .Where(t => taste.TopLovedTitleIds.Contains(t.Id) && t.TmdbId != null)
+            .Select(t => new { t.MediaType, TmdbId = t.TmdbId!.Value })
+            .Take(RecommendationSeeds)
+            .ToListAsync(ct);
+        foreach (var loved in lovedTitles)
+        {
+            batches.Add(await tmdb.GetRecommendationsAsync(loved.MediaType == MediaType.Movie, loved.TmdbId, ct));
+        }
 
         var items = batches.SelectMany(b => b)
             .GroupBy(i => (i.IsMovie, i.Id))

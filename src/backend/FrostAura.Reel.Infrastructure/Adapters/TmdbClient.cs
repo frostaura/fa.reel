@@ -63,6 +63,9 @@ public class TmdbClient(
     public Task<IReadOnlyList<TmdbListItem>> GetTrendingAsync(bool movies, CancellationToken ct = default) =>
         GetListAsync(movies ? "trending/movie/week" : "trending/tv/week", movies, RatePriority.Reconcile, ct);
 
+    public Task<IReadOnlyList<TmdbListItem>> GetRecommendationsAsync(bool movies, long tmdbId, CancellationToken ct = default) =>
+        GetListAsync($"{(movies ? "movie" : "tv")}/{tmdbId}/recommendations", movies, RatePriority.Reconcile, ct);
+
     public async Task<IReadOnlyList<TmdbKeyword>> SearchKeywordsAsync(string query, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(query))
