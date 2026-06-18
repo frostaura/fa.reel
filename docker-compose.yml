@@ -64,6 +64,10 @@ services:
       SYNC_DELTA_MINUTES: ${SYNC_DELTA_MINUTES:-15}
       SYNC_HOT_MINUTES: ${SYNC_HOT_MINUTES:-5}
       RETRAIN_MIN_NEW_RATINGS: ${RETRAIN_MIN_NEW_RATINGS:-10}
+      # Stripe billing (optional — Ask Reel runs free without it; set all three to switch on paid plans)
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_PRICE_ID: ${STRIPE_PRICE_ID:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       # Region default when CF-IPCountry is absent
       GEOIP_DEFAULT_REGION: ${GEOIP_DEFAULT_REGION:-US}
       APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:8090}

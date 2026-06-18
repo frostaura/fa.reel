@@ -2,6 +2,7 @@ import { useState } from "react";
 import { RefreshCw } from "lucide-react";
 import PreferencesSection from "../components/settings/PreferencesSection";
 import PreferenceTags from "../components/settings/PreferenceTags";
+import BillingCard from "../components/settings/BillingCard";
 import {
   useGetSessionQuery,
   useGetSyncStatusQuery,
@@ -117,6 +118,8 @@ export default function Settings() {
           {savedFlash && <span className="fa-caption text-fa-success">Saved</span>}
         </div>
       </section>
+
+      <BillingCard />
 
       <EmailCapture onSave={(email) => updateSettings({ email })} />
 

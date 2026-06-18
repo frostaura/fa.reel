@@ -455,6 +455,13 @@ export const api = createApi({
       query: (id) => ({ url: `preferences/tags/${id}`, method: "DELETE" }),
       invalidatesTags: ["PrefTags", "Feed"],
     }),
+    getBillingStatus: b.query<{ tier: string; configured: boolean }, void>({
+      query: () => "billing/status",
+      providesTags: ["Session"],
+    }),
+    createCheckout: b.mutation<{ url?: string; error?: string }, void>({
+      query: () => ({ url: "billing/checkout", method: "POST" }),
+    }),
   }),
 });
 
@@ -492,6 +499,8 @@ export const {
   useGetPreferenceTagsQuery,
   useAddPreferenceTagMutation,
   useRemovePreferenceTagMutation,
+  useGetBillingStatusQuery,
+  useCreateCheckoutMutation,
   useSetPinMutation,
   useVerifyPinMutation,
   useRemovePinMutation,

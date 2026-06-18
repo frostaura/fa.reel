@@ -23,6 +23,11 @@ public class Account
 
     public AccountTier Tier { get; set; } = AccountTier.Free;
 
+    /// <summary>Stripe linkage (set on first checkout) — lets subscription webhooks map back to the account.</summary>
+    public string? StripeCustomerId { get; set; }
+
+    public string? StripeSubscriptionId { get; set; }
+
     public PipelineStage PipelineStage { get; set; } = PipelineStage.Linked;
 
     public DateTime PipelineStageChangedAt { get; set; }

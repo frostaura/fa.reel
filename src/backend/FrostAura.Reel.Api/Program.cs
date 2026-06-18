@@ -38,6 +38,7 @@ app.MapTasteEndpoints();
 app.MapProviderEndpoints();
 app.MapFilterEndpoints();
 app.MapPreferenceTagEndpoints();
+app.MapBillingEndpoints();
 app.MapMetricsEndpoints();
 app.MapSseEndpoints();
 app.MapDevEndpoints();
