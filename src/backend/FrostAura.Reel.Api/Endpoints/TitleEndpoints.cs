@@ -30,6 +30,29 @@ public static class TitleEndpoints
     {
         var group = app.MapGroup("/api/titles").RequireAccount();
 
+        // Cold-start / taste-sharpening: popular catalogue titles the user hasn't rated yet — a
+        // grid to quickly rate from memory, bootstrapping (or sharpening) the model.
+        group.MapGet("/rate-suggestions", async (IReelDbContext db, IAccountContext accountContext, CancellationToken ct) =>
+        {
+            var accountId = accountContext.AccountId!.Value;
+            var suggestions = await db.Titles
+                .Where(t => t.TmdbId != null && t.PosterPath != null && t.TmdbVoteCount > 200
+                    && !db.UserRatings.Any(r => r.AccountId == accountId && r.TitleId == t.Id))
+                .OrderByDescending(t => t.TmdbPopularity)
+                .Take(30)
+                .Select(t => new
+                {
+                    titleId = t.Id,
+                    mediaType = t.MediaType.ToString(),
+                    tmdbId = t.TmdbId,
+                    name = t.Name,
+                    year = t.Year,
+                    posterPath = t.PosterPath,
+                })
+                .ToListAsync(ct);
+            return Results.Ok(suggestions);
+        });
+
         group.MapGet("/{mediaType}/{tmdbId:long}", async (
             string mediaType, long tmdbId,
             IReelDbContext db, IAccountContext accountContext, CancellationToken ct) =>

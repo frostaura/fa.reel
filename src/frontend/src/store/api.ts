@@ -459,6 +459,12 @@ export const api = createApi({
       query: () => "billing/status",
       providesTags: ["Session"],
     }),
+    getRateSuggestions: b.query<
+      { titleId: string; mediaType: "Movie" | "Show"; tmdbId: number; name: string; year: number | null; posterPath: string | null }[],
+      void
+    >({
+      query: () => "titles/rate-suggestions",
+    }),
     createCheckout: b.mutation<{ url?: string; error?: string }, void>({
       query: () => ({ url: "billing/checkout", method: "POST" }),
     }),
@@ -501,6 +507,7 @@ export const {
   useRemovePreferenceTagMutation,
   useGetBillingStatusQuery,
   useCreateCheckoutMutation,
+  useGetRateSuggestionsQuery,
   useSetPinMutation,
   useVerifyPinMutation,
   useRemovePinMutation,

@@ -119,6 +119,14 @@ export default function Settings() {
         </div>
       </section>
 
+      <a href="/rate" className="fa-card p-5 flex items-center justify-between gap-3 hover:border-fa-frost/40 transition-colors" data-testid="sharpen-link">
+        <div>
+          <h2 className="fa-section-title">Sharpen your recommendations</h2>
+          <p className="fa-caption text-fa-frost-dim">Rate a few popular titles you’ve seen — the model gets sharper.</p>
+        </div>
+        <span className="fa-body text-fa-frost shrink-0">Rate →</span>
+      </a>
+
       <BillingCard />
 
       <EmailCapture onSave={(email) => updateSettings({ email })} />

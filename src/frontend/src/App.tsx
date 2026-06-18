@@ -12,6 +12,7 @@ import Person from "./pages/Person";
 import Saved from "./pages/Saved";
 import TasteDna from "./pages/TasteDna";
 import SearchResults from "./pages/SearchResults";
+import RatePicker from "./pages/RatePicker";
 
 export default function App() {
   return (
@@ -40,6 +41,7 @@ export default function App() {
           <Route path="/saved" element={<Saved />} />
           <Route path="/dna" element={<TasteDna />} />
           <Route path="/search" element={<SearchResults />} />
+          <Route path="/rate" element={<RatePicker />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/lab" element={<Lab />} />
         </Route>
